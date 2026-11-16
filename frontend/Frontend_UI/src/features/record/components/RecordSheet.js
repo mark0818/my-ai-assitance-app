@@ -3,12 +3,14 @@
 // ============================================================
 
 
-import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
-import { transcribeRecording } from '../../../services/ai/Transcribe';
+import { newTranscribeJob, transcribeRecording } from '../../../services/ai/Transcribe';
 import { analyzeText } from '../../../services/ai/AiAnalyze';
+import { addMemo } from '../../../data/memos/MemoStore';
+import { setAiTransmission } from '../../../data/settings/SettingsStore';
 
 const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
@@ -33,24 +35,49 @@ function Player({ uri }) {
   );
 }
 
-export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenProposals }) {
-  const [msg, setMsg] = useState('');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => setMsg(''), [sheet]);
+// 받아 적은 글로 만든 메모 제목: "녹음 11/16 14:05"
+const memoTitleFor = (d = new Date()) =>
+  `녹음 ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenMemo, onOpenProposals }) {
+  // phase: idle(처음) · upload(올리고 받아 적는 중) · analyze(일정·할 일 찾는 중) · done · error
+  const [phase, setPhase] = useState('idle');
+  const [error, setError] = useState(null); // { code, message }
+  const [result, setResult] = useState(null); // { text, memoId, added, analyzeError }
+  const job = useRef(null); // 녹음 하나의 변환 작업 (다시 시도할 때 업로드를 다시 하지 않도록 이어서 씀)
+  useEffect(() => {
+    setPhase('idle'); setError(null); setResult(null);
+    job.current = sheet?.uri ? newTranscribeJob(sheet.uri, sheet.seconds) : null;
+  }, [sheet]);
   if (!sheet) return null;
+  const busy = phase === 'upload' || phase === 'analyze';
 
   const convert = async () => {
-    setBusy(true);
-    const r = await transcribeRecording(sheet.uri);
-    if (!r.ok) {
-      setBusy(false);
-      setMsg('음성을 글자로 바꾸는 기능은 서버가 연결되면 사용할 수 있어요.\n녹음은 파일 보관함에 저장돼 있어요.');
-      return;
-    }
-    const a = await analyzeText({ sourceType: 'record', sourceId: sheet.fileId || '', sourceTitle: '녹음', text: r.text });
-    setBusy(false);
-    setMsg(a.added > 0 ? `AI 제안 ${a.added}건을 만들었어요.` : '찾은 일정이나 할 일이 없어요.');
+    if (busy || !job.current) return;
+    setError(null);
+    setPhase('upload');
+    const r = await transcribeRecording(job.current);
+    job.current = r.job;
+    if (!r.ok) { setError({ code: r.code, message: r.message }); setPhase('error'); return; }
+    const text = r.text.trim();
+    if (!text) { setError({ code: 'EMPTY', message: '녹음에서 알아들을 수 있는 말이 없었어요' }); setPhase('error'); return; }
+    // 받아 적은 글은 메모로 남기고, 그 메모에서 일정·할 일을 찾아 AI 제안으로 만듦
+    let memoId = null;
+    try { memoId = addMemo({ title: memoTitleFor(), body: text.slice(0, 100_000) })?.id ?? null; } catch { /* 저장 실패해도 글은 보여 줌 */ }
+    setResult({ text, memoId, added: 0, analyzeError: null });
+    if (!memoId) { setPhase('done'); return; }
+    setPhase('analyze');
+    const a = await analyzeText({ sourceType: 'memo', sourceId: memoId, explicit: true });
+    setResult({ text, memoId, added: a.added ?? 0, analyzeError: a.error ?? null });
+    setPhase('done');
   };
+  // 외부 AI 보내기 동의 후 바로 다시 변환
+  const allowAndConvert = async () => {
+    try { await setAiTransmission('external', true); } catch (e) { setError({ code: 'CONSENT', message: e.message }); return; }
+    convert();
+  };
+  const consentNeeded = error && (error.code === 'CONSENT_REQUIRED' || error.code === 'TRANSMISSION_DENIED');
+  const label = phase === 'upload' ? '녹음을 받아 적는 중…' : phase === 'analyze' ? '일정·할 일 찾는 중…' : phase === 'error' ? '다시 시도' : '텍스트로 정리하기';
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
@@ -59,13 +86,42 @@ export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenProposa
           {sheet.state === 'saved' && (
             <>
               <Text style={styles.title}>🎙  녹음을 저장했어요</Text>
-              <Text style={styles.sub}>{fmt(sheet.seconds || 0)} · 파일 보관함에 보관돼요</Text>
+              <Text style={styles.sub}>{fmt(sheet.seconds || 0)}{sheet.fileId ? ' · 파일 보관함에 보관돼요' : ''}</Text>
               <Player uri={sheet.uri} />
-              <Pressable accessibilityRole="button" disabled={busy} onPress={convert} style={[styles.primary, busy && { opacity: 0.5 }]}>
-                <Text style={styles.primaryText}>{busy ? '정리하는 중…' : '텍스트로 정리하기'}</Text>
-              </Pressable>
-              {!!msg && <Text style={styles.note}>{msg}</Text>}
-              <Pressable accessibilityRole="button" onPress={onOpenFiles} style={styles.ghost}><Text style={styles.ghostText}>파일 보관함 보기</Text></Pressable>
+              {phase === 'done' && result ? (
+                <>
+                  {/* 받아 적은 글 (길면 안에서 스크롤) */}
+                  <ScrollView style={styles.textBox} contentContainerStyle={{ padding: spacing.md }}>
+                    <Text style={styles.text} selectable>{result.text}</Text>
+                  </ScrollView>
+                  <Text style={styles.note}>
+                    {result.memoId ? '메모로 저장했어요. ' : '메모로 저장하지 못했어요. 글을 길게 눌러 복사해 주세요. '}
+                    {result.memoId && (result.analyzeError ? '일정·할 일은 찾지 못했어요.' : result.added > 0 ? `AI 제안 ${result.added}건을 만들었어요.` : '찾은 일정이나 할 일은 없어요.')}
+                  </Text>
+                  {result.added > 0 && onOpenProposals && (
+                    <Pressable accessibilityRole="button" onPress={onOpenProposals} style={styles.primary}><Text style={styles.primaryText}>AI 제안 확인하기</Text></Pressable>
+                  )}
+                  {!!result.memoId && onOpenMemo && (
+                    <Pressable accessibilityRole="button" onPress={() => onOpenMemo(result.memoId)} style={styles.ghost}><Text style={styles.ghostText}>메모 열기</Text></Pressable>
+                  )}
+                </>
+              ) : (
+                <>
+                  {consentNeeded ? (
+                    <Pressable accessibilityRole="button" disabled={busy} onPress={allowAndConvert} style={styles.primary}>
+                      <Text style={styles.primaryText}>허용하고 정리하기</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable accessibilityRole="button" disabled={busy} onPress={convert} style={[styles.primary, busy && { opacity: 0.5 }]}>
+                      {busy ? <ActivityIndicator color={colors.white} /> : null}
+                      <Text style={styles.primaryText}>{label}</Text>
+                    </Pressable>
+                  )}
+                  {!!error && <Text style={styles.error}>{error.message}</Text>}
+                  {phase === 'idle' && <Text style={styles.hint}>녹음을 외부 AI로 보내 글자로 바꾸고 메모로 저장해요. 변환이 끝나면 서버의 녹음은 바로 지워져요.</Text>}
+                </>
+              )}
+              {!!sheet.fileId && <Pressable accessibilityRole="button" onPress={onOpenFiles} style={styles.ghost}><Text style={styles.ghostText}>파일 보관함 보기</Text></Pressable>}
             </>
           )}
           {sheet.state === 'denied' && (
@@ -96,7 +152,11 @@ const styles = StyleSheet.create({
   title: { fontSize: font.title, fontWeight: '800', color: colors.ink },
   sub: { fontSize: font.body, color: colors.muted, lineHeight: 20 },
   note: { fontSize: font.body, color: colors.mintDark, lineHeight: 20, fontWeight: '600' },
-  primary: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' },
+  error: { fontSize: font.body, color: colors.coral, lineHeight: 20, fontWeight: '600' },
+  hint: { fontSize: font.caption, color: colors.muted, lineHeight: 18 },
+  textBox: { maxHeight: 200, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  text: { fontSize: font.body, color: colors.ink, lineHeight: 21 },
+  primary: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm },
   primaryText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.white },
   ghost: { minHeight: 48, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   ghostText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },

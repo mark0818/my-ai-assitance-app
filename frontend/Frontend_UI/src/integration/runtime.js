@@ -11,6 +11,8 @@ import { listNoteFavorites, setNoteFavorites } from '../lib/stella/favorites';
 import { createAIService } from './ai-service';
 import { CHAT_LIMITS, answerQuery, askAssistant, excerptFor, planQuery, rankRecords, toSources, todayIn } from '../lib/stella/ai-chat';
 import { requireTransmission } from '../../../../shared/contracts/ai-policy.js';
+import { retryPlan, transcribeErrorMessage, transcribeUploaded, uploadRecording } from '../lib/stella/transcribe';
+import { File } from 'expo-file-system';
 import { SUPABASE_URL, SUPABASE_KEY } from '../lib/stella/config';
 
 let current = null;
@@ -144,6 +146,52 @@ export async function ocrForChat(base64, signal) {
     { route: policy.route, signal });
   if (current !== own || signal?.aborted) throw new Error('요청이 취소됐습니다');
   return r.draft;
+}
+
+// Recording → text (gateway /transcribe, cloud AI only). Same consent gate as chat.
+//   job: { uri, seconds, uploadId, requestId, uploaded } — kept by the caller so a retry follows lib/stella
+//   retryPlan: same request, new request on the same upload, or upload again (see newTranscribeJob/nextTranscribeJob).
+//   The server deletes the uploaded audio after a successful transcription (kept 3 days after a failure).
+export const newTranscribeJob = (uri, seconds) => ({ uri, seconds, uploadId: randomUUID(), requestId: randomUUID(), uploaded: false });
+export function nextTranscribeJob(job, code) {
+  const plan = retryPlan(code);
+  if (plan === 'new_request_same_upload') return { ...job, requestId: randomUUID() };
+  if (plan === 'reupload') return { ...job, uploadId: randomUUID(), requestId: randomUUID(), uploaded: false };
+  return job; // same_request, or stop (the screen shows the message and the user may try again later)
+}
+async function readAudio(uri) {
+  if (Platform.OS === 'web') {
+    // expo-audio on web records to a blob: URL (usually audio/webm). Storage rejects mime parameters such as ;codecs=opus
+    const blob = await (await fetch(uri)).blob();
+    const type = (blob.type || 'audio/webm').split(';')[0].trim();
+    return { bytes: blob, mimeType: type, fileName: `recording.${type.split('/')[1] || 'webm'}` };
+  }
+  const ext = (uri.split('?')[0].match(/\.(\w+)$/)?.[1] ?? 'm4a').toLowerCase();
+  const mime = { m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/mp4', caf: 'audio/x-caf', wav: 'audio/wav', mp3: 'audio/mpeg', webm: 'audio/webm', ogg: 'audio/ogg' }[ext] ?? 'audio/mp4';
+  return { bytes: await new File(uri).bytes(), mimeType: mime, fileName: `recording.${ext}` };
+}
+/** Returns { text, remainingMinutes, job } on success; throws { code, message, job } (job = what to retry with). */
+export async function transcribeForDevice(job) {
+  const own = runtime();
+  const policy = aiPolicy();
+  if (policy.route !== 'external') throw Object.assign(new Error('녹음 변환은 클라우드 AI에서만 쓸 수 있어요'), { code: 'ROUTE_UNSUPPORTED', job });
+  requireTransmission(policy.route, [policy], policy.consent);
+  let step = job;
+  try {
+    if (!step.uploaded) {
+      const audio = await readAudio(step.uri);
+      await uploadRecording(supabase, { uploadId: step.uploadId, ...audio });
+      step = { ...step, uploaded: true };
+    }
+    const r = await transcribeUploaded(supabase, {
+      clientRequestId: step.requestId, uploadId: step.uploadId, durationSeconds: Math.max(1, step.seconds || 1), workspaceId: policy.workspaceId,
+    });
+    if (current !== own) throw Object.assign(new Error('계정이 바뀌었습니다'), { code: 'CANCELLED' });
+    return { text: r.text, remainingMinutes: r.remainingMinutes, job: step };
+  } catch (e) {
+    const code = e?.code ?? 'UNKNOWN';
+    throw Object.assign(new Error(code === 'CANCELLED' ? e.message : transcribeErrorMessage(e)), { code, job: nextTranscribeJob(step, code) });
+  }
 }
 
 // Chat title from the conversation (gateway "organize" makes a ≤40-char title). Same consent gate as chat;

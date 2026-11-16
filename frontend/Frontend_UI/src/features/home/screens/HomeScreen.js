@@ -158,9 +158,10 @@ export default function HomeScreen({ navigation, calendar }) {
         setRecSheet({ state: 'error' });
         return;
       }
-      const fileId = addRecording({ uri, seconds });
+      // 파일 보관함에 복사 (웹 등 기기 파일로 저장할 수 없는 환경이면 보관 없이 진행: 녹음 듣기·변환은 그대로 됨)
+      const saved = await addRecording(uri, seconds).catch(() => null);
       addUsage('voice', Math.max(1, Math.ceil(seconds / 60))); // 녹음 이용량은 분 단위
-      setRecSheet({ state: 'saved', uri, seconds, fileId });
+      setRecSheet({ state: 'saved', uri, seconds, fileId: saved?.id ?? null });
     } else {
       const r = await rec.start();
       if (!r.ok) {
@@ -429,7 +430,13 @@ export default function HomeScreen({ navigation, calendar }) {
         </View>
       </View>
 
-      <RecordSheet sheet={recSheet} onClose={() => setRecSheet(null)} onOpenFiles={() => { setRecSheet(null); navigation.navigate(ROUTES.Files); }} />
+      <RecordSheet
+        sheet={recSheet}
+        onClose={() => setRecSheet(null)}
+        onOpenFiles={() => { setRecSheet(null); navigation.navigate(ROUTES.Files); }}
+        onOpenMemo={(memoId) => { setRecSheet(null); navigation.navigate(ROUTES.MemoEdit, { memoId }); }}
+        onOpenProposals={() => { setRecSheet(null); navigation.navigate(ROUTES.Proposals); }}
+      />
       <WorkspacePicker visible={wsOpen} onClose={() => setWsOpen(false)} navigation={navigation} onSwitched={onSwitched} />
       {!!wsNotice && (
         <View pointerEvents="none" style={styles.wsNotice}>
