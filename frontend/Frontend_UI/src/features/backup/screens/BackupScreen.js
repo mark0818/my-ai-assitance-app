@@ -46,7 +46,7 @@ export default function BackupScreen() {
     setBusy(true);
     const r = await createBackup(false);
     setBusy(false);
-    if (!r.ok) return showNotice(r.reason === 'not-personal' ? '개인 공간에서만 백업할 수 있어요' : '백업하지 못했어요. 저장 공간이 부족할 수 있어요. 오래된 백업을 지우고 다시 시도해 주세요.');
+    if (!r.ok) return showNotice(r.reason === 'not-personal' ? '개인 공간에서만 백업할 수 있어요' : r.message || '백업하지 못했어요. 저장 공간이 부족할 수 있어요. 오래된 백업을 지우고 다시 시도해 주세요.');
     showNotice(r.dropped > 0 ? `백업했어요 · 가장 오래된 백업 ${r.dropped}개는 지워졌어요` : '백업했어요');
   };
 
@@ -56,7 +56,7 @@ export default function BackupScreen() {
     setBusy(true);
     const r = await restoreBackup(selected.id);
     setBusy(false);
-    if (!r.ok) return showNotice(r.reason === 'not-personal' ? '개인 공간에서만 복원할 수 있어요' : '복원하지 못했어요');
+    if (!r.ok) return showNotice(r.reason === 'not-personal' ? '개인 공간에서만 복원할 수 있어요' : r.message || '복원하지 못했어요');
     setSelectedId(null);
     showNotice(r.safety ? '복원했어요 · 복원 전 상태는 "자동" 백업으로 남겨 뒀어요' : '복원했어요');
   };

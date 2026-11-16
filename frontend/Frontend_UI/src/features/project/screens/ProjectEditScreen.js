@@ -49,10 +49,11 @@ export default function ProjectEditScreen({ navigation, route }) {
     if (!f.title.trim()) return setError('제목을 입력해 주세요.');
     const fields = { ...f, title: f.title.trim() };
     if (existing) {
-      updateProject(existing.id, fields);
+      if (!updateProject(existing.id, fields)) return;
       navigation.goBack();
     } else {
       const p = addProject(fields);
+      if (!p) return; // 저장 실패는 저장소가 안내
       // 만든 프로젝트의 상세 화면으로 (뒤로가기 하면 목록)
       navigation.goBack();
       setTimeout(() => navigation.navigate(ROUTES.ProjectDetail, { projectId: p.id }), 0);

@@ -7,7 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { ROUTES } from '../../../navigation/routes';
-import { MONTHLY_INVITES, invitesLeft } from '../../../data/projects/ProjectStore';
+import { useInviteQuota } from '../../../data/projects/ProjectStore';
 import { PLANS, USAGE_LABELS, getUsage, limitOf, useSettings } from '../../../data/settings/SettingsStore';
 
 function Bar({ label, used, limit }) {
@@ -30,7 +30,7 @@ function Bar({ label, used, limit }) {
 export default function AiUsageScreen({ navigation }) {
   const s = useSettings(); // 이용량이 바뀌면 다시 그리기
   const u = getUsage();
-  const used = MONTHLY_INVITES - invitesLeft();
+  const quota = useInviteQuota(); // 서버 기준 이번 달 초대 횟수 (불러오는 중이면 null)
 
   return (
     <View style={styles.root}>
@@ -41,7 +41,7 @@ export default function AiUsageScreen({ navigation }) {
         {Object.keys(USAGE_LABELS).map((k) => (
           <Bar key={k} label={USAGE_LABELS[k]} used={u[k]} limit={limitOf(k)} />
         ))}
-        <Bar label="팀원 초대 횟수" used={used} limit={MONTHLY_INVITES} />
+        <Bar label="팀원 초대 횟수" used={quota ? quota.used : 0} limit={quota ? quota.limit : null} />
 
         <Pressable accessibilityRole="button" onPress={() => navigation.navigate(ROUTES.Subscription)} style={styles.btn}>
           <Text style={styles.btnText}>요금제 변경</Text>

@@ -4,11 +4,10 @@
 
 
 import React, { useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
-import { getSettings, updateSettings } from '../../../data/settings/SettingsStore';
-import { Row, SaveButton, SectionTitle, ToggleRow, useNotice } from '../../../shared/components/SettingsUi';
+import { Row, SectionTitle, ToggleRow, useNotice } from '../../../shared/components/SettingsUi';
 
 const PERMS = [
   { id: 'mic', label: '마이크 권한', why: '녹음에 사용' },
@@ -18,12 +17,11 @@ const PERMS = [
 ];
 
 export default function SecurityScreen({ navigation }) {
-  const saved = getSettings();
-  const [appLock, setAppLock] = useState(saved.security.appLock);
   const [policy, setPolicy] = useState(false);
   const notice = useNotice();
 
   const openSystem = async () => {
+    if (Platform.OS === 'web') return notice.show('웹에서는 브라우저 주소창 왼쪽의 사이트 설정에서 권한을 바꿀 수 있어요');
     try {
       await Linking.openSettings();
     } catch (e) {
@@ -35,7 +33,8 @@ export default function SecurityScreen({ navigation }) {
     <View style={styles.root}>
       <ScreenHeader title="보안 및 권한 설정" onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={styles.content}>
-        <ToggleRow label="앱 화면 잠금" sub="앱을 열 때 인증을 요구해요 (기기 인증 연결 후 적용)" value={appLock} onValueChange={setAppLock} />
+        {/* 기기 인증(생체·PIN) 모듈이 아직 없어서, 켜도 잠기지 않는 설정은 저장하지 않음 */}
+        <ToggleRow label="앱 화면 잠금" sub="준비 중 · 기기 인증(지문·얼굴·PIN) 연결 후 켤 수 있어요" value={false} disabled />
 
         <SectionTitle>기기 권한</SectionTitle>
         {PERMS.map((p) => (
@@ -44,14 +43,6 @@ export default function SecurityScreen({ navigation }) {
 
         <SectionTitle>약관</SectionTitle>
         <Row label="개인정보 처리방침" onPress={() => setPolicy(true)} />
-
-        <SaveButton
-          disabled={appLock === saved.security.appLock}
-          onPress={() => {
-            updateSettings('security', { appLock });
-            notice.show('저장했어요');
-          }}
-        />
       </ScrollView>
       {notice.view}
 

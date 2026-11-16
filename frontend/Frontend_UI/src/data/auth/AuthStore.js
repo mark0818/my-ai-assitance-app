@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { supabase } from '../../lib/stella/supabase';
-import { openSession, closeSession, maybeRuntime } from '../../integration/runtime';
+import { openSession, closeSession, maybeRuntime, wipeSessionData } from '../../integration/runtime';
+import { getWithdrawPreview, withdrawAccount, withdrawErrorMessage } from '../../lib/stella/withdraw';
 import { initializeProfile } from '../settings/SettingsStore';
 let state = { status: 'loading', user: null, error: null };
 const listeners = new Set();
@@ -37,4 +38,19 @@ export async function signOut() {
   try { await closeSession(true); const { error } = await supabase.auth.signOut({ scope: 'local' }); if (error) throw error; await enqueue(null); return { ok: true }; }
   catch (error) { publish(maybeRuntime() ? before : { status: 'out', user: null, error: error.message }); return { ok: false, message: error.message }; }
 }
-export async function deleteAccount() { throw new Error('계정 삭제는 서버 미리보기와 삭제 확인 화면 연결 후 사용할 수 있습니다'); }
+export const loadWithdrawPreview = () => getWithdrawPreview(supabase);
+// Runs inside the auth queue so the SIGNED_OUT event from withdrawAccount waits until the device data is erased.
+export function deleteAccount() {
+  const job = queue.catch(() => undefined).then(async () => {
+    try {
+      await withdrawAccount(supabase);
+    } catch (error) {
+      return { ok: false, message: withdrawErrorMessage(error) };
+    }
+    try { await wipeSessionData(); } catch (error) { console.error('[auth] 기기 데이터를 지우지 못했습니다', error); }
+    publish({ status: 'out', user: null, error: null });
+    return { ok: true };
+  });
+  queue = job;
+  return job;
+}

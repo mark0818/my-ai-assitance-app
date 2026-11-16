@@ -19,7 +19,13 @@ export function updateSettings(section, patch) {
   const s = getSettings();
   return writePreference('settings', { ...s, [section]: { ...s[section], ...patch } });
 }
-export const getUsage = () => readPreference('usage-display', { question: 0, summary: 0, record: 0 });
+// Display copy of the server subscription (get_my_subscription). The server stays the authority for limits.
+export function setServerPlan(plan) {
+  if (!PLANS[plan]) throw new Error(`알 수 없는 요금제: ${plan}`);
+  const s = getSettings();
+  return s.plan === plan ? s : writePreference('settings', { ...s, plan });
+}
+export const getUsage =() => readPreference('usage-display', { question: 0, summary: 0, record: 0 });
 // Display counters are not quota authority. Gateway and DB enforce real usage.
 export const addUsage = key => writePreference('usage-display', { ...getUsage(), [key]: (getUsage()[key] ?? 0) + 1 });
 export const limitOf = () => null;

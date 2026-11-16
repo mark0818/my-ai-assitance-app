@@ -21,6 +21,14 @@ const sessionFlushers = new Set();
 export function registerSessionFlush(flush) { sessionFlushers.add(flush); return () => sessionFlushers.delete(flush); }
 export const runtimeSubscribe = fn => { listeners.add(fn); return () => listeners.delete(fn); };
 const emit = () => { for (const fn of listeners) fn(); };
+// Adapters whose data lives outside the local store (server sync records, server RPC caches) call this after they change.
+export const emitRuntime = emit;
+// Sync-engine context for one shared workspace (projects, team, invites are written to the engine directly).
+export function syncContext(serverId) {
+  const own = runtime();
+  if (!serverId) throw new Error('서버에 연결된 공유 공간이 아닙니다');
+  return { db: own.syncDb, transport: supabaseTransport, workspaceId: serverId, myAccountId: own.session.id };
+}
 export function runtime() { if (!current) throw new Error('로그인과 기기 저장소 초기화가 필요합니다'); return current; }
 export const maybeRuntime = () => current;
 export function aiPolicy(source) {
@@ -103,7 +111,7 @@ async function initSession(user, db, syncNative) {
     workspaces: { list: async () => (await listMyWorkspaces()).map(m => ({ id: m.workspace.id, name: m.workspace.name,
       description: m.workspace.description, role: m.role })) },
   });
-  current = { db, syncNative, store, bridge, session, stop: null, ai: null };
+  current = { db, syncNative, syncDb, store, bridge, session, stop: null, ai: null };
   preferenceCache.clear();
   const own = current;
   current.ai = createAIService({ store, gateway, newId: randomUUID,
@@ -149,6 +157,20 @@ export async function askFromDevice(question, signal) {
   }
   requireTransmission(policy.route, [aiPolicy()], aiPolicy().consent);
   return { ...answer, sources: answer.sources.map(s => ({ ...s, route: s.type === 'memo' ? 'MemoEdit' : 'TaskEdit' })) };
+}
+
+// After account withdrawal: erase this account's device data (personal records live only here), then close.
+export async function wipeSessionData() {
+  const own = current;
+  if (!own) return;
+  own.session.generation = ++generation;
+  own.ai.cancel(); own.stop?.(); own.stop = null;
+  await own.bridge.refresh('__none__');
+  own.store.clearAll();
+  own.db.runSync('delete from integration_preferences');
+  preferenceCache.clear();
+  await engine.clearLocalSync(own.syncDb);
+  await closeSession(false);
 }
 
 export async function closeSession(requireSynced = true) {

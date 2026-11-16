@@ -7,3 +7,4 @@ const EMPTY = Object.freeze([]);
 export const list = name => readPreference(scoped(name), EMPTY);
 export function saveList(name, values) { return writePreference(scoped(name), values); }
 export { runtime, runtimeSubscribe, readPreference, writePreference };
+export { maybeRuntime, emitRuntime, syncContext } from '../integration/runtime';

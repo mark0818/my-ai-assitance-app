@@ -30,15 +30,16 @@ export function Row({ label, value, onPress, danger, sub }) {
   );
 }
 
-export function ToggleRow({ label, sub, value, onValueChange }) {
+export function ToggleRow({ label, sub, value, onValueChange, disabled }) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, disabled && { opacity: 0.5 }]}>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.rowLabel}>{label}</Text>
         {!!sub && <Text style={styles.rowSub}>{sub}</Text>}
       </View>
       <Switch
         accessibilityLabel={label}
+        disabled={disabled}
         value={!!value}
         onValueChange={onValueChange}
         trackColor={{ false: colors.line, true: colors.mint }}
