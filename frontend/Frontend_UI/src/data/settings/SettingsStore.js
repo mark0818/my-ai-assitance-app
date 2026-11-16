@@ -1,5 +1,5 @@
 import { runtime, runtimeSubscribe, useValue, readPreference, writePreference } from '../hooks';
-import { updateMyProfile } from '../../lib/stella/account';
+import { grantConsent, hasConsent, revokeConsent, updateMyProfile } from '../../lib/stella/account';
 export const WEEKDAY_NAMES = ['월요일','화요일','수요일','목요일','금요일','토요일','일요일'];
 export const PLANS = { free: { name: 'Free', price: 0 }, pro: { name: 'Pro', price: 4900 }, team: { name: 'Team', price: 9900 } };
 export const USAGE_LABELS = { question: '질문', summary: '요약', record: '녹음' };
@@ -19,6 +19,26 @@ export function updateSettings(section, patch) {
   const s = getSettings();
   return writePreference('settings', { ...s, [section]: { ...s[section], ...patch } });
 }
+// Local (self-hosted) AI needs the SERVER_AI consent migration, ai-gateway v15 and a reachable model server.
+// Until those are deployed the chat offers it as "준비 중" instead of failing on send.
+export const LOCAL_AI_AVAILABLE = false;
+export const AI_ROUTE_LABEL = { external: '클라우드 AI', self_hosted: '로컬 AI' };
+
+// Turn sending to the chosen AI route on/off. The server consent is recorded first; the device setting only
+// opens after the server accepted it (and closes before revoking, so a failure never leaves it open).
+export async function setAiTransmission(route, enabled) {
+  const own = runtime();
+  const type = route === 'self_hosted' ? 'SERVER_AI' : 'EXTERNAL_AI';
+  const denied = { route, transmissionDisabled: true, allowedProviders: [], consent: {} };
+  updateSettings('ai', denied);
+  // Switching routes back and forth must not pile up duplicate consent rows on the server
+  if (enabled) { if (!(await hasConsent(type))) await grantConsent(type, { provider: route }); } else await revokeConsent(type);
+  if (runtime() !== own) throw new Error('계정이 바뀌었습니다');
+  return updateSettings('ai', { route, transmissionDisabled: !enabled, allowedProviders: enabled ? [route] : [], consent: { [route]: enabled } });
+}
+// Switching route always closes sending: consent is per route and must be given again.
+export const setAiRoute = route => updateSettings('ai', { route, transmissionDisabled: true, allowedProviders: [], consent: {} });
+
 // Display copy of the server subscription (get_my_subscription). The server stays the authority for limits.
 export function setServerPlan(plan) {
   if (!PLANS[plan]) throw new Error(`알 수 없는 요금제: ${plan}`);

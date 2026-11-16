@@ -7,11 +7,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { ROUTES } from '../../../navigation/routes';
-import { PLANS, WEEKDAY_NAMES, getSettings, updateSettings } from '../../../data/settings/SettingsStore';
+import { PLANS, WEEKDAY_NAMES, getSettings, setAiTransmission, updateSettings } from '../../../data/settings/SettingsStore';
 import { TimePickerModal } from '../../../shared/components/DateTimePicker';
 import { PURPOSES, TIMEZONES, hasPurpose, timezoneLabel, togglePurpose } from '../../../data/setup/SetupStore';
 import { Row, SaveButton, SectionTitle, ToggleRow, same, useNotice } from '../../../shared/components/SettingsUi';
-import { grantConsent, revokeConsent } from '../../../lib/stella/account';
 import { runtime, maybeRuntime } from '../../../integration/runtime';
 
 const MODES = [
@@ -39,14 +38,12 @@ export default function AiSettingsScreen({ navigation }) {
             if (consentBusy.current) return;
             consentBusy.current = true;
             const own = runtime();
-            const selected = ai.route ?? 'external'; const type = selected === 'self_hosted' ? 'SERVER_AI' : 'EXTERNAL_AI';
-            const denied = { transmissionDisabled: true, allowedProviders: [], consent: {} };
-            updateSettings('ai', denied); set(denied);
+            const selected = ai.route ?? 'external';
+            set({ transmissionDisabled: true, allowedProviders: [], consent: {} });
             try {
-              if (enabled) await grantConsent(type, { provider: selected }); else await revokeConsent(type);
-              if (maybeRuntime() !== own) return;
-              const next = { transmissionDisabled: !enabled, allowedProviders: enabled ? [selected] : [], consent: { [selected]: enabled } };
-              updateSettings('ai', { route: selected, ...next }); set(next);
+              const saved = await setAiTransmission(selected, enabled);
+              const { route, transmissionDisabled, allowedProviders, consent } = saved.ai; // 다른 칸의 저장 전 수정은 유지
+              if (maybeRuntime() === own) set({ route, transmissionDisabled, allowedProviders, consent });
             } catch (error) { if (maybeRuntime() === own) notice.show(error.message); }
             finally { consentBusy.current = false; }
           }} />
