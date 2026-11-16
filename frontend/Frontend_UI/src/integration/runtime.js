@@ -56,9 +56,12 @@ export async function gateway(path, body, { route = 'external', signal } = {}) {
   const { data } = await supabase.auth.getSession();
   if (!data.session) throw new Error('로그인이 필요합니다');
   // functions-js 2.57 has no AbortSignal option; use the same HTTP contract with an abortable transport.
+  // No header means 'external' on the gateway. Send it only for self_hosted: a gateway whose CORS list lacks
+  // x-ai-route (deployed v14) fails the browser preflight, which surfaces as "Failed to fetch" on web.
+  const headers = { 'content-type': 'application/json', apikey: SUPABASE_KEY, authorization: `Bearer ${data.session.access_token}` };
+  if (route !== 'external') headers['x-ai-route'] = route;
   const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-gateway/${path}`, {
-    method: 'POST', signal, headers: { 'content-type': 'application/json', apikey: SUPABASE_KEY,
-      authorization: `Bearer ${data.session.access_token}`, 'x-ai-route': route }, body: JSON.stringify(body),
+    method: 'POST', signal, headers, body: JSON.stringify(body),
   });
   const payload = await response.json();
   if (!response.ok) throw Object.assign(new Error(payload?.message ?? 'AI 서버 요청에 실패했습니다'), { code: payload?.code ?? 'NETWORK' });
