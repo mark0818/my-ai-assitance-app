@@ -34,7 +34,7 @@ export default function ProjectsScreen({ navigation }) {
     <View style={styles.root} {...menuSwipe}>
       <ScreenHeader
         title={selecting ? `${ids.length}개 선택` : '프로젝트'}
-        onBack={selecting ? exitSelect : undefined}
+        onBack={selecting ? exitSelect : navigation.goBack}
       />
       <ScrollView contentContainerStyle={[styles.list, selecting && { paddingBottom: 110 }]}>
         <View style={styles.summary}>

@@ -18,7 +18,7 @@ const fmt = (ms) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export default function BackupScreen() {
+export default function BackupScreen({ navigation }) {
   const menuSwipe = useSwipeToOpenMenu();
   const { current } = useWorkspaces();
   const [order, setOrder] = useState('new'); // 'new' 최신순 | 'old' 오래된순
@@ -63,7 +63,7 @@ export default function BackupScreen() {
 
   return (
     <View style={styles.root} {...menuSwipe}>
-      <ScreenHeader title="백업 및 복원" />
+      <ScreenHeader title="백업 및 복원" onBack={navigation.goBack} />
       {!current.personal ? (
         // 조직(공유) 공간에서는 백업·복원을 쓸 수 없음 → 개인 공간으로 안내
         <ScrollView contentContainerStyle={styles.content}>

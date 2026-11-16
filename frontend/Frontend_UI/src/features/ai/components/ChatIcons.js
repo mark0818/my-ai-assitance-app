@@ -12,6 +12,15 @@ export function BackIcon({ size = 24, color = colors.ink }) {
   );
 }
 
+// 메뉴 열기: 같은 길이 줄 세 개 (사이드 메뉴로 연 화면의 왼쪽 위)
+export function MenuIcon({ size = 24, color = colors.ink }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4 6.5h16M4 12h16M4 17.5h16" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 // 이전 대화: 긴 줄 위, 짧은 줄 아래
 export function HistoryIcon({ size = 24, color = colors.ink }) {
   return (

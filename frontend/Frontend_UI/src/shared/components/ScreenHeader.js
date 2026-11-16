@@ -7,24 +7,24 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useInsets as useSafeAreaInsets } from '../hooks/useInsets';
 import { colors, font, spacing } from '../theme/theme';
-import { useMenu } from '../../navigation/MenuContext';
+import { useLeadAction } from '../../navigation/ScreenEntry';
 
 export default function ScreenHeader({ title, onBack, right }) {
   // 노치/상태바에 제목이 가려지지 않도록 위쪽 안전영역 높이를 가져옴
   const insets = useSafeAreaInsets();
-  // 메뉴 열기 함수
-  const { open } = useMenu();
+  // 왼쪽 버튼: 사이드 메뉴로 연 화면이면 ☰(메뉴 열기), 다른 화면에서 들어왔으면 ‹(onBack)
+  const lead = useLeadAction(onBack);
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={onBack ? '뒤로 가기' : '메뉴 열기'} // 화면 읽기 프로그램용 설명
-        onPress={onBack || open} // onBack 이 있으면 그것, 없으면 메뉴 열기
+        accessibilityLabel={lead.menu ? '메뉴 열기' : '뒤로 가기'} // 화면 읽기 프로그램용 설명
+        onPress={lead.onPress}
         hitSlop={12}             // 버튼 주변 12px 도 터치로 인정(누르기 쉽게)
         style={styles.side}
       >
-        <Text style={styles.icon}>{onBack ? '‹' : '☰'}</Text>
+        <Text style={styles.icon}>{lead.menu ? '☰' : '‹'}</Text>
       </Pressable>
 
       <Text style={styles.title} numberOfLines={1} accessibilityRole="header">

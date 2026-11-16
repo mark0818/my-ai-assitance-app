@@ -23,7 +23,7 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <View style={styles.root} {...menuSwipe}>
-      <ScreenHeader title="설정" />
+      <ScreenHeader title="설정" onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <Pressable accessibilityRole="button" accessibilityLabel="계정 정보 보기" onPress={() => navigation.navigate(ROUTES.Account)} style={styles.account}>
           <View style={styles.avatar}>

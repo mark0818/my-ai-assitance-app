@@ -24,7 +24,7 @@ const GRAB_HEIGHT = 45;  // 닫혀 있을 때 화면 맨 아래에 보이는 "�
 const HALF_VISIBLE = 560; // "중간" 단계에서 화면에 보이는 시트 높이 (달력 한 달이 들어갈 정도)
 const FLING_MS = 150;    // 손을 뗄 때의 속도로 "150ms 뒤 위치"를 미리 계산 → 휙 던지면 더 멀리 가게 함
 
-export default function CalendarSheet({ calendar, startFull = false, onReachTop, onClose, onAddTask, onEditTask }) {
+export default function CalendarSheet({ calendar, startFull = false, onReachTop, onClose, onAddTask, onEditTask, lead }) {
   // ---------- 1) 크기 계산 ----------
   const windowH = useWindowDimensions().height; // 기기가 알려 주는 화면 높이 (폰에 따라 실제 그려지는 영역과 다를 수 있음)
   const [parentH, setParentH] = useState(0);      // 시트가 놓인 곳의 "실제로 그려지는 높이" (아래 probe View 로 잼)
@@ -237,6 +237,8 @@ export default function CalendarSheet({ calendar, startFull = false, onReachTop,
           <View style={styles.bar} />
           <Text style={styles.grabText}>{hint}</Text>
         </View>
+        {/* 손잡이 줄 왼쪽 버튼 (캘린더 화면의 ☰ 또는 ‹). 손잡이 위에 겹쳐 그려서 눌림을 먼저 받음 */}
+        {lead ? <View style={styles.lead}>{lead}</View> : null}
 
         {/* 달력 본문 (아래 안전영역만큼 띄움) */}
         <View style={{ flex: 1, paddingBottom: insets.bottom }}>
@@ -299,6 +301,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   grab: { height: GRAB_HEIGHT, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  lead: { position: 'absolute', top: 0, left: spacing.lg, height: GRAB_HEIGHT, justifyContent: 'center' },
   bar: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.line },
   grabText: { fontSize: font.caption, color: colors.muted, fontWeight: '600' },
 });

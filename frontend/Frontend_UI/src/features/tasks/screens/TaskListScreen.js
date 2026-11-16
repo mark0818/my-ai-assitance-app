@@ -43,7 +43,7 @@ export default function TasksScreen({ navigation }) {
 
   return (
     <View style={styles.root} {...menuSwipe}>
-      <ScreenHeader title="할 일 목록" />
+      <ScreenHeader title="할 일 목록" onBack={navigation.goBack} />
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {FILTERS.map((f) => {

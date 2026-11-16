@@ -22,7 +22,8 @@ import {
 import { randomUUID } from 'expo-crypto';
 import { askFromDevice, titleForChat } from '../../../integration/runtime';
 import { useInsets as useSafeAreaInsets } from '../../../shared/hooks/useInsets';
-import { BackIcon, ClipIcon, EditIcon, MessageIcon, MoreIcon, NewChatIcon, PinIcon, TrashIcon } from '../components/ChatIcons';
+import { BackIcon, ClipIcon, EditIcon, MenuIcon, MessageIcon, MoreIcon, NewChatIcon, PinIcon, TrashIcon } from '../components/ChatIcons';
+import { useLeadAction } from '../../../navigation/ScreenEntry';
 import SlidePanel from '../components/SlidePanel';
 import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { openParams } from '../../../data/memos/MemoStore';
@@ -146,6 +147,8 @@ function MessageBubble({ message, onOpenSource }) {
 
 export default function AiChatScreen({ navigation }) {
   const menuSwipe = useSwipeToOpenMenu();
+  // 왼쪽 위: 사이드 메뉴로 열었으면 ☰, 다른 화면(홈의 ✦ 등)에서 왔으면 ‹
+  const lead = useLeadAction(navigation.goBack);
   const insets = useSafeAreaInsets();
   const settings = useSettings();
   const ai = settings.ai ?? {};
@@ -379,8 +382,8 @@ export default function AiChatScreen({ navigation }) {
       <View style={styles.flex} {...menuSwipe}>
         {/* 머리글: 왼쪽 뒤로 가기 · 가운데 제목 · 오른쪽 [새 채팅 | 더보기] (이전 대화는 더보기 안, AI 선택·사용량은 입력창 오른쪽 아래) */}
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]} onLayout={(e) => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-          <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" onPress={navigation.goBack} hitSlop={6} style={({ pressed }) => [styles.roundBtn, pressed && styles.pressed]}>
-            <BackIcon />
+          <Pressable accessibilityRole="button" accessibilityLabel={lead.menu ? '메뉴 열기' : '뒤로 가기'} onPress={lead.onPress} hitSlop={6} style={({ pressed }) => [styles.roundBtn, pressed && styles.pressed]}>
+            {lead.menu ? <MenuIcon /> : <BackIcon />}
           </Pressable>
           {/* 대화 중에는 대화 제목 (자동으로 만든 제목 또는 사용자가 바꾼 제목) */}
           <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">

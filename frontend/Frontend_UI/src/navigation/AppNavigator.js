@@ -46,6 +46,7 @@ import WorkspaceCreateScreen from '../features/workspace/screens/WorkspaceCreate
 import WorkspaceInviteScreen from '../features/workspace/screens/WorkspaceInviteScreen';
 import { colors, FILL } from '../shared/theme/theme';
 import { ROUTES } from './routes';
+import { ScreenEntryProvider } from './ScreenEntry';
 
 // ------------------------------------------------------------
 // 진짜로 만들어진 화면 목록: { 화면 이름: 화면 컴포넌트 }
@@ -156,6 +157,18 @@ export default function AppNavigator() {
     });
   }, []);
 
+  // 사이드 메뉴에서 이동: navigate 와 같지만 "메뉴로 연 화면" 표시(fromMenu)를 붙여 머리글 왼쪽이 ☰ 가 됨
+  const navigateFromMenu = useCallback((route) => {
+    if (route === ROUTES.Home) return navigate(route);
+    setHistory((prev) => {
+      const top = prev[prev.length - 1];
+      // 지금 화면을 메뉴에서 다시 누름: 화면은 그대로 두고 표시만 붙임 (key 가 같아 다시 만들어지지 않음)
+      if (top.name === route) return top.fromMenu ? prev : [...prev.slice(0, -1), { ...top, fromMenu: true }];
+      keyRef.current += 1;
+      return [...prev, { name: route, key: keyRef.current, fromMenu: true }];
+    });
+  }, [navigate]);
+
   // 뒤로가기: 기록이 2개 이상일 때만 맨 끝을 제거
   const goBack = useCallback(() => {
     setHistory((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
@@ -188,6 +201,9 @@ export default function AppNavigator() {
 
   // 각 화면에 넘겨줄 navigation 도구 (값이 바뀔 때만 새로 만듦)
   const navigation = useMemo(() => ({ navigate, goBack }), [navigate, goBack]);
+  // 지금 화면의 진입 경로 (머리글 왼쪽 버튼이 ☰ 인지 ‹ 인지 정함)
+  const fromMenu = !!current.fromMenu;
+  const entry = useMemo(() => ({ fromMenu, goBack }), [fromMenu, goBack]);
 
   const onHome = currentRoute === ROUTES.Home;
   // 지금 화면에 맞는 컴포넌트 선택: 등록된 진짜 화면이 있으면 그것, 없으면 임시 화면
@@ -206,17 +222,19 @@ export default function AppNavigator() {
           key 가 바뀌면(= 새로 이동하면) 화면이 새로 만들어집니다. */}
       {!onHome && (
         <View style={styles.fill}>
-          <Screen
-            key={current.key}
-            navigation={navigation}
-            calendar={calendar}
-            route={{ name: current.name, params: current.params }}
-          />
+          <ScreenEntryProvider value={entry}>
+            <Screen
+              key={current.key}
+              navigation={navigation}
+              calendar={calendar}
+              route={{ name: current.name, params: current.params }}
+            />
+          </ScreenEntryProvider>
         </View>
       )}
 
-      {/* 사이드 메뉴: 화면 위에 겹쳐 뜨는 부품. 항목을 누르면 navigate 로 이동 */}
-      <SideMenu onNavigate={navigate} currentRoute={currentRoute} />
+      {/* 사이드 메뉴: 화면 위에 겹쳐 뜨는 부품. 항목을 누르면 "메뉴로 연 화면"으로 이동 */}
+      <SideMenu onNavigate={navigateFromMenu} currentRoute={currentRoute} />
     </View>
   );
 }
