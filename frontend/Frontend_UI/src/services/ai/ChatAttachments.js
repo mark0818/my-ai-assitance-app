@@ -17,7 +17,7 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const TEXT_TYPES = /^(text\/|application\/(json|csv))/;
 const TEXT_EXT = /\.(txt|md|csv|json)$/i;
 
-async function readBytes(asset) {
+export async function readBytes(asset) {
   if (Platform.OS === 'web') {
     const blob = asset.file ?? (await (await fetch(asset.uri)).blob());
     return new Uint8Array(await blob.arrayBuffer());
@@ -51,7 +51,8 @@ export async function extract(item, signal) {
   const { asset } = item;
   if (!item.kind) return { ...item, status: 'error', error: '읽을 수 없는 형식이에요 (사진·PDF·Word·PowerPoint·텍스트)' };
   try {
-    const bytes = await readBytes(asset);
+    // item.bytes: already in memory (e.g. a cloud file downloaded by the file vault)
+    const bytes = item.bytes ?? await readBytes(asset);
     if (item.kind === 'image') {
       if (bytes.byteLength > OCR_LIMITS.maxImageBytes) return { ...item, status: 'error', error: '사진이 5MB보다 커요. 줄여서 올려 주세요' };
       const draft = await ocrForChat(toBase64(bytes), signal);
@@ -67,7 +68,7 @@ export async function extract(item, signal) {
     return text.trim() ? { ...item, status: 'ready', text } : { ...item, status: 'error', error: '빈 파일이에요' };
   } catch (error) {
     const message = error?.code === 'ROUTE_UNSUPPORTED' || error?.code === 'CONSENT_REQUIRED' || error?.name === 'AIPolicyError'
-      ? (error.code === 'CONSENT_REQUIRED' ? 'AI로 자료 보내기를 허용해야 사진을 읽을 수 있어요' : error.message)
+      ? (error.code === 'CONSENT_REQUIRED' ? 'AI 설정에서 외부 AI로 보내기를 허용해야 사진을 읽을 수 있어요' : error.message)
       : item.kind === 'document' ? documentErrorMessage(error)
         // gateway() errors carry the server's own Korean message; aiErrorMessage only knows AiError instances
         : (error?.code && error.message) || aiErrorMessage(error);

@@ -3,6 +3,7 @@ import { supabase } from '../../lib/stella/supabase';
 import { openSession, closeSession, maybeRuntime, wipeSessionData } from '../../integration/runtime';
 import { getWithdrawPreview, withdrawAccount, withdrawErrorMessage } from '../../lib/stella/withdraw';
 import { initializeProfile } from '../settings/SettingsStore';
+import { unregisterPush } from '../../services/notify/PushRegister';
 let state = { status: 'loading', user: null, error: null };
 const listeners = new Set();
 const publish = next => { state = next; for (const f of listeners) f(); };
@@ -35,7 +36,8 @@ export async function startSession() {
 export async function signOut() {
   const before = state;
   publish({ status: 'loading', user: null, error: null });
-  try { await closeSession(true); const { error } = await supabase.auth.signOut({ scope: 'local' }); if (error) throw error; await enqueue(null); return { ok: true }; }
+  // 로그아웃한 계정의 서버 알림이 이 기기로 오지 않게 (로그인 상태일 때 해야 서버가 받아 줌)
+  try { await unregisterPush(); await closeSession(true); const { error } = await supabase.auth.signOut({ scope: 'local' }); if (error) throw error; await enqueue(null); return { ok: true }; }
   catch (error) { publish(maybeRuntime() ? before : { status: 'out', user: null, error: error.message }); return { ok: false, message: error.message }; }
 }
 export const loadWithdrawPreview = () => getWithdrawPreview(supabase);

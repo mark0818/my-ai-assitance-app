@@ -12,6 +12,7 @@ import { createAIService } from './ai-service';
 import { CHAT_LIMITS, answerQuery, askAssistant, excerptFor, planQuery, rankRecords, toSources, todayIn } from '../lib/stella/ai-chat';
 import { requireTransmission } from '../../../../shared/contracts/ai-policy.js';
 import { retryPlan, transcribeErrorMessage, transcribeUploaded, uploadRecording } from '../lib/stella/transcribe';
+import { agendaJudgeErrorMessage, judgeAgendaDiscussion } from '../lib/stella/agenda-judge';
 import { File } from 'expo-file-system';
 import { SUPABASE_URL, SUPABASE_KEY } from '../lib/stella/config';
 
@@ -193,6 +194,23 @@ export async function transcribeForDevice(job) {
     throw Object.assign(new Error(code === 'CANCELLED' ? e.message : transcribeErrorMessage(e)), { code, job: nextTranscribeJob(step, code) });
   }
 }
+
+// Agenda compare: was each changed item talked about in that day's meeting notes? (gateway /agenda/judge,
+// cloud AI only, same consent gate as chat). Same input is answered from lib/stella's in-memory cache.
+export async function judgeAgendaForDevice({ changes, discussions, projectTitle, date }) {
+  const own = runtime();
+  const policy = aiPolicy();
+  if (policy.route !== 'external') throw Object.assign(new Error('안건 판단은 클라우드 AI에서만 쓸 수 있어요'), { code: 'ROUTE_UNSUPPORTED' });
+  requireTransmission(policy.route, [policy], policy.consent);
+  const ws = policy.workspaceId;
+  const r = await judgeAgendaDiscussion(supabase, {
+    changes: changes.map(c => ({ ...c, workspaceId: ws })), discussions: discussions.map(d => ({ ...d, workspaceId: ws })),
+    newId: randomUUID, projectTitle, date, timezone: policy.timezone,
+  });
+  if (current !== own) throw Object.assign(new Error('계정이 바뀌었습니다'), { code: 'CANCELLED' });
+  return r;
+}
+export { agendaJudgeErrorMessage };
 
 // Chat title from the conversation (gateway "organize" makes a ≤40-char title). Same consent gate as chat;
 // counts toward the monthly organize limit. Only the question and answer text are sent, not the sources.

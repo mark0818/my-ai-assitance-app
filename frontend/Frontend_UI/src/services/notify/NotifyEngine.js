@@ -19,6 +19,10 @@ import { getSettings, subscribeSettings, WEEKDAY_NAMES } from '../../data/settin
 import { getProjects, subscribeProjects } from '../../data/projects/ProjectStore';
 import { getTasks, subscribeTasks } from '../../data/tasks/TaskStore';
 import { cancelAll, ensurePermission, scheduleAll } from './Notify';
+import { onPushState, registerPush, serverRemindersActive } from './PushRegister';
+import { maybeRuntime } from '../../integration/runtime';
+
+const isPersonalSpace = () => maybeRuntime()?.store.getCurrentWorkspace()?.personal !== false;
 
 const HORIZON_DAYS = 14;
 const OFFSET_MIN = { 없음: null, 정시: 0, '10분 전': 10, '1시간 전': 60, '2시간 전': 120, '하루 전': 1440 };
@@ -60,8 +64,11 @@ export function planNotifications(now = Date.now()) {
     if (at >= from && at <= to) list.push({ ...it, at });
   };
 
+  // 공유 공간이고 서버 알림이 오고 있으면 마감·시작 알림은 서버가 보냄 (같은 알림이 두 번 오지 않게 기기 예약은 건너뜀)
+  const serverCovers = !isPersonalSpace() && serverRemindersActive();
+
   getTasks().forEach((t) => {
-    if (t.status === '완료') return;
+    if (serverCovers || t.status === '완료') return;
     const off = OFFSET_MIN[t.alarm];
     if (off == null) return;
     if (t.start && s.notify.schedule) {
@@ -87,7 +94,7 @@ export function planNotifications(now = Date.now()) {
     }
   });
 
-  if (s.notify.due) {
+  if (s.notify.due && !serverCovers) {
     getProjects().forEach((p) => {
       const off = OFFSET_MIN[p.alarm];
       if (off == null || !p.due || p.status === '완료') return;
@@ -153,7 +160,9 @@ export async function startNotifier() {
   if (started) return;
   started = true;
   await ensurePermission();
-  unsubs = [subscribeTasks(later), subscribeProjects(later), subscribeSettings(later)];
+  // 서버 알림 등록 (권한은 바로 위에서 이미 물어봄). 등록 상태가 바뀌면 기기 예약을 다시 계산
+  unsubs = [subscribeTasks(later), subscribeProjects(later), subscribeSettings(later), onPushState(later)];
+  void registerPush();
   tick = setInterval(syncNotifications, 60000);
   appSub = AppState.addEventListener('change', (st) => st === 'active' && syncNotifications());
   syncNotifications();

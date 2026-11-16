@@ -95,7 +95,7 @@ export default function ProjectEditScreen({ navigation, route }) {
         <Chips label="중요도" options={PRIORITIES} value={f.priority} onChange={set('priority')} />
         <Chips label="상태" options={PROJECT_STATUSES} value={f.status} onChange={set('status')} />
         <Chips label="알림" options={ALARMS} value={f.alarm} onChange={set('alarm')} />
-        <Text style={styles.note}>알림 설정은 저장만 되고, 실제 알림은 추후 지원돼요.</Text>
+        <Text style={styles.note}>마감일 아침 9시를 기준으로 알려 드려요 (휴대폰 앱). 공유 공간 프로젝트는 서버 알림을 켠 멤버 모두에게 가요.</Text>
 
         {input('담당자', 'assignee')}
         {input('장소', 'place')}
