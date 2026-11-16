@@ -20,13 +20,16 @@ import {
   View,
 } from 'react-native';
 import { randomUUID } from 'expo-crypto';
-import { askFromDevice } from '../../../integration/runtime';
+import { askFromDevice, titleForChat } from '../../../integration/runtime';
 import { useInsets as useSafeAreaInsets } from '../../../shared/hooks/useInsets';
-import ScreenHeader from '../../../shared/components/ScreenHeader';
+import { BackIcon, ClipIcon, EditIcon, MessageIcon, MoreIcon, NewChatIcon, PinIcon, TrashIcon } from '../components/ChatIcons';
+import SlidePanel from '../components/SlidePanel';
 import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { openParams } from '../../../data/memos/MemoStore';
-import { AI_ROUTE_LABEL, LOCAL_AI_AVAILABLE, addUsage, setAiRoute, setAiTransmission, useSettings } from '../../../data/settings/SettingsStore';
-import { deleteChat, saveChat, useChats } from '../../../data/ai/ChatStore';
+import { AI_ROUTE_LABEL, LOCAL_AI_AVAILABLE, PLANS, addUsage, loadAiUsage, setAiRoute, setAiTransmission, useSettings } from '../../../data/settings/SettingsStore';
+import { ROUTES } from '../../../navigation/routes';
+import { TITLE_MAX, deleteChat, getChat, saveChat, setChatTitle, setPinned, sortChats, useChats } from '../../../data/ai/ChatStore';
+import UpSheet from '../components/UpSheet';
 import { MAX_ATTACHMENTS, describe, extract, pickAttachments } from '../../../services/ai/ChatAttachments';
 import { chatErrorMessage } from '../../../lib/stella/ai-chat';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
@@ -163,6 +166,15 @@ export default function AiChatScreen({ navigation }) {
   const [panel, setPanel] = useState(null);                  // 'history' | 'route' | 'attach' | null
   const [consentBusy, setConsentBusy] = useState(false);
   const [banner, setBanner] = useState('');
+  const [usage, setUsage] = useState({ data: null, error: '' }); // 서버 기준 이번 달 사용량
+  const [headerBottom, setHeaderBottom] = useState(0);           // 업로드된 파일 창이 여기까지 올라옴
+
+  const openUsage = async () => {
+    setPanel('usage');
+    setUsage((u) => ({ data: u.data, error: '' }));
+    try { setUsage({ data: await loadAiUsage(), error: '' }); }
+    catch (e) { setUsage({ data: null, error: e?.message || '사용량을 불러오지 못했어요' }); }
+  };
 
   const listRef = useRef(null);
   const timers = useRef({ think: null, type: null });
@@ -185,13 +197,39 @@ export default function AiChatScreen({ navigation }) {
     return () => { a.remove(); b.remove(); };
   }, []);
 
-  // 답이 끝나면(쉬는 상태) 지금 대화를 기록에 저장
+  // 답이 끝나면(쉬는 상태) 지금 대화를 기록에 저장하고, 첫 답이 나온 대화는 내용을 보고 제목을 만듦
+  const titled = useRef(new Set()); // 이번 화면에서 이미 제목을 요청한 대화 (실패해도 다시 요청하지 않음)
   useEffect(() => {
     if (status === 'idle' && dirty.current && messages.length) {
       dirty.current = false;
       saveChat(chatId, messages);
+      const chat = getChat(chatId);
+      const question = messages.find((m) => m.role === 'user')?.text;
+      const answer = messages.find((m) => m.role === 'ai' && !m.error && m.text)?.text;
+      if (chat?.titleSource === 'question' && question && answer && !titled.current.has(chatId)) {
+        titled.current.add(chatId);
+        const id = chatId;
+        titleForChat(question, answer)
+          .then((title) => setChatTitle(id, title, 'ai'))
+          .catch(() => { /* 제목 만들기 실패: 첫 질문 제목을 그대로 둠 */ });
+      }
     }
   }, [status, messages, chatId]);
+
+  // ---------- 제목 수정 ----------
+  const [renaming, setRenaming] = useState(null); // { id, value }
+  const startRename = (chat) => {
+    setPanel(null);
+    if (!chat && !getChat(chatId)) saveChat(chatId, messages.map((m) => (m.role === 'ai' ? { ...m, done: true } : m)));
+    const target = chat ?? getChat(chatId);
+    if (target) setRenaming({ id: target.id, value: target.title });
+  };
+  const saveRename = () => {
+    if (!renaming) return;
+    if (!renaming.value.trim()) return setBanner('제목을 입력해 주세요');
+    setChatTitle(renaming.id, renaming.value, 'user');
+    setRenaming(null);
+  };
 
   // ---------- 첨부 ----------
   const addFiles = async (mode) => {
@@ -293,6 +331,29 @@ export default function AiChatScreen({ navigation }) {
     setPanel(null);
   };
   const newChat = () => reset();
+
+  // ---------- 고정 ----------
+  const pinned = !!chats.find((c) => c.id === chatId)?.pinnedAt;
+  const togglePin = () => {
+    setPanel(null);
+    const ok = setPinned(chatId, !pinned, messages.map((m) => (m.role === 'ai' ? { ...m, done: true } : m)));
+    setBanner(!ok ? '답이 끝난 뒤에 고정할 수 있어요' : pinned ? '고정을 해제했어요' : '이 대화를 고정했어요 · 이전 대화 맨 위에 보여요');
+  };
+
+  // ---------- 이 대화에 올린 파일 ----------
+  const chatUploads = messages.flatMap((m) => (m.role === 'user' ? (m.attachments ?? []).map((a) => ({ ...a, messageId: m.id, question: m.text })) : []));
+  const jumpTo = (messageId) => {
+    setPanel(null);
+    const index = messages.findIndex((m) => m.id === messageId);
+    if (index >= 0) setTimeout(() => listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 }), 250);
+  };
+  // 지금 대화를 기록에서 지우고 빈 대화로 (reset이 다시 저장하지 않도록 dirty를 먼저 내림)
+  const deleteCurrent = () => {
+    const id = chatId;
+    dirty.current = false;
+    reset();
+    deleteChat(id);
+  };
   const openChat = (chat) => reset({ id: chat.id, messages: chat.messages.map((m) => ({ ...m, done: true })) });
 
   // ---------- AI 선택 · 전송 허용 ----------
@@ -302,39 +363,46 @@ export default function AiChatScreen({ navigation }) {
     if (next === 'self_hosted' && !LOCAL_AI_AVAILABLE) return;
     setAiRoute(next);
   };
-  const allow = async () => {
+  const toggleSending = async (enabled) => {
     if (consentBusy) return;
     setConsentBusy(true);
-    try { await setAiTransmission(route, true); setBanner(''); }
+    try { await setAiTransmission(route, enabled); setBanner(''); }
     catch (e) { setBanner(e.message); }
     finally { setConsentBusy(false); }
   };
+  const allow = () => toggleSending(true);
 
   const canSend = (input.trim().length > 0 || ready.length > 0) && status === 'idle' && !reading && routeReady;
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.flex} {...menuSwipe}>
-        <ScreenHeader
-          title="AI 채팅"
-          onBack={navigation.goBack}
-          right={
-            <Pressable accessibilityRole="button" accessibilityLabel="이전 대화" onPress={() => setPanel('history')} hitSlop={10}>
-              <Text style={styles.headerBtn}>기록</Text>
-            </Pressable>
-          }
-        />
-
-        {/* 도구 줄: 어떤 AI로 보낼지 + 새 채팅 */}
-        <View style={styles.toolbar}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`AI 선택, 지금 ${AI_ROUTE_LABEL[route]}`} onPress={() => setPanel('route')} style={styles.routeChip}>
-            <View style={[styles.routeDot, { backgroundColor: !routeReady ? colors.muted : allowed ? colors.mint : colors.coral }]} />
-            <Text style={styles.routeText}>{AI_ROUTE_LABEL[route]}</Text>
-            <Text style={styles.routeCaret}>▾</Text>
+        {/* 머리글: 왼쪽 뒤로 가기 · 가운데 제목 · 오른쪽 [새 채팅 | 더보기] (이전 대화는 더보기 안, AI 선택·사용량은 입력창 오른쪽 아래) */}
+        <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]} onLayout={(e) => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+          <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" onPress={navigation.goBack} hitSlop={6} style={({ pressed }) => [styles.roundBtn, pressed && styles.pressed]}>
+            <BackIcon />
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="새 채팅" onPress={newChat} style={styles.newChatBtn}>
-            <Text style={styles.newChatText}>＋ 새 채팅</Text>
-          </Pressable>
+          {/* 대화 중에는 대화 제목 (자동으로 만든 제목 또는 사용자가 바꾼 제목) */}
+          <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
+            {(messages.length > 0 && chats.find((c) => c.id === chatId)?.title) || 'AI 채팅'}
+          </Text>
+          {/* 첫 화면: 이전 대화(말풍선) 하나 · 대화 중: [새 채팅 | 더보기] */}
+          <View style={styles.pill}>
+            {messages.length === 0 ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="이전 대화" onPress={() => setPanel('history')} hitSlop={4} style={({ pressed }) => [styles.pillBtn, pressed && styles.pressed]}>
+                <MessageIcon />
+              </Pressable>
+            ) : (
+              <>
+                <Pressable accessibilityRole="button" accessibilityLabel="새 채팅" onPress={newChat} hitSlop={4} style={({ pressed }) => [styles.pillBtn, pressed && styles.pressed]}>
+                  <NewChatIcon />
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="더보기" onPress={() => setPanel('more')} hitSlop={4} style={({ pressed }) => [styles.pillBtn, pressed && styles.pressed]}>
+                  <MoreIcon />
+                </Pressable>
+              </>
+            )}
+          </View>
         </View>
 
         {!routeReady ? (
@@ -383,6 +451,11 @@ export default function AiChatScreen({ navigation }) {
             )}
             contentContainerStyle={styles.list}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+            // 아직 그려지지 않은 메시지로 이동할 때: 대략 위치로 먼저 옮긴 뒤 다시 시도
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
+              setTimeout(() => listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 }), 100);
+            }}
             ListFooterComponent={status === 'thinking' ? <TypingDots /> : null}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -410,8 +483,9 @@ export default function AiChatScreen({ navigation }) {
         </ScrollView>
       )}
 
-      {/* ---------- 입력창 ---------- */}
-      <View style={[styles.inputBar, { paddingBottom: keyboardUp ? spacing.sm : insets.bottom + spacing.sm }]}>
+      {/* ---------- 입력창 + 오른쪽 아래 도구 (AI 선택 · 사용량) ---------- */}
+      <View style={[styles.inputArea, { paddingBottom: keyboardUp ? spacing.xs : insets.bottom + spacing.xs }]}>
+      <View style={styles.inputBar}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="사진이나 파일 첨부"
@@ -447,6 +521,17 @@ export default function AiChatScreen({ navigation }) {
             <View style={styles.stopSquare} />
           </Pressable>
         )}
+      </View>
+      <View style={styles.inputTools}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`AI 선택, 지금 ${AI_ROUTE_LABEL[route]}`} onPress={() => setPanel('route')} style={styles.routeChip}>
+          <View style={[styles.routeDot, { backgroundColor: !routeReady ? colors.muted : allowed ? colors.mint : colors.coral }]} />
+          <Text style={styles.routeText}>{AI_ROUTE_LABEL[route]}</Text>
+          <Text style={styles.routeCaret}>▾</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="이번 달 AI 사용량" onPress={openUsage} style={styles.routeChip}>
+          <Text style={styles.routeText}>사용량</Text>
+        </Pressable>
+      </View>
       </View>
 
       {/* ---------- 첨부 종류 고르기 ---------- */}
@@ -496,37 +581,148 @@ export default function AiChatScreen({ navigation }) {
         </Pressable>
       </Modal>
 
-      {/* ---------- 이전 대화 ---------- */}
-      <Modal transparent visible={panel === 'history'} animationType="fade" onRequestClose={() => setPanel(null)}>
+      {/* ---------- 더보기 메뉴 (오른쪽 위) ---------- */}
+      <Modal transparent visible={panel === 'more'} animationType="fade" onRequestClose={() => setPanel(null)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setPanel(null)}>
+          {/* 대화 중에만 열림 (첫 화면은 말풍선 버튼으로 이전 대화만). 아이콘 + 글자 */}
+          <View style={[styles.menu, { top: (headerBottom || insets.top + 60) + spacing.xs }]} accessibilityViewIsModal>
+            {[
+              { key: 'history', label: '이전 대화', Icon: MessageIcon, onPress: () => setPanel('history') },
+              { key: 'rename', label: '제목 수정', Icon: EditIcon, onPress: () => startRename(null) },
+              { key: 'pin', label: pinned ? '고정 해제' : '고정', Icon: PinIcon, onPress: togglePin },
+              { key: 'files', label: `업로드된 파일${chatUploads.length ? ` ${chatUploads.length}` : ''}`, Icon: ClipIcon, onPress: () => setPanel('files') },
+              { key: 'delete', label: '삭제', Icon: TrashIcon, onPress: deleteCurrent, danger: true },
+            ].map(({ key, label, Icon, onPress, danger }) => (
+              <Pressable key={key} accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}>
+                <Icon size={22} color={danger ? colors.coral : colors.ink} />
+                <Text style={[styles.menuText, danger && { color: colors.coral }]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ---------- 이번 달 AI 사용량 (서버 기준) ---------- */}
+      <Modal transparent visible={panel === 'usage'} animationType="fade" onRequestClose={() => setPanel(null)}>
+        <Pressable style={styles.backdrop} onPress={() => setPanel(null)}>
+          <View style={styles.sheet} accessibilityViewIsModal>
+            <Text style={styles.sheetTitle}>이번 달 AI 사용량</Text>
+            {usage.error ? (
+              <Text style={[styles.optionSub, { color: colors.coral }]}>{usage.error}</Text>
+            ) : !usage.data ? (
+              <ActivityIndicator color={colors.mintDark} style={{ alignSelf: 'flex-start', marginVertical: spacing.md }} />
+            ) : (
+              <>
+                <Text style={styles.optionSub}>요금제 · {PLANS[usage.data.plan].name}</Text>
+                {usage.data.items.map((u) => {
+                  const ratio = u.limit > 0 ? Math.min(1, u.used / u.limit) : 0;
+                  return (
+                    <View key={u.key} style={styles.usageRow}>
+                      <View style={styles.usageHead}>
+                        <Text style={styles.usageLabel}>{u.label}</Text>
+                        <Text style={styles.usageNum}>{u.used} / {u.limit}회 · 남은 {u.remaining}회</Text>
+                      </View>
+                      <View style={styles.usageTrack}>
+                        <View style={[styles.usageFill, { width: `${ratio * 100}%`, backgroundColor: ratio >= 0.9 ? colors.coral : colors.mint }]} />
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+            <Text style={styles.sheetNote}>매달 1일(한국 시간)에 다시 채워져요. 요금제를 바꾸면 한도도 바로 바뀌어요.</Text>
+            <Pressable accessibilityRole="button" onPress={() => { setPanel(null); navigation.navigate(ROUTES.Subscription); }} style={styles.option}>
+              <Text style={styles.optionName}>요금제 보기</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ---------- 제목 수정 ---------- */}
+      <Modal transparent visible={!!renaming} animationType="fade" onRequestClose={() => setRenaming(null)}>
         <View style={styles.backdrop}>
-          <View style={[styles.sheet, styles.historySheet]} accessibilityViewIsModal>
-            <View style={styles.historyHead}>
-              <Text style={styles.sheetTitle}>이전 대화</Text>
-              <Pressable accessibilityRole="button" onPress={() => setPanel(null)} hitSlop={10}>
-                <Text style={styles.close}>닫기</Text>
+          <View style={styles.sheet} accessibilityViewIsModal>
+            <Text style={styles.sheetTitle}>제목 수정</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={renaming?.value ?? ''}
+              onChangeText={(value) => setRenaming((r) => (r ? { ...r, value } : r))}
+              onSubmitEditing={saveRename}
+              maxLength={TITLE_MAX}
+              autoFocus
+              selectTextOnFocus
+              placeholder="대화 제목"
+              placeholderTextColor={colors.muted}
+              accessibilityLabel="대화 제목"
+            />
+            <Text style={styles.sheetNote}>{(renaming?.value ?? '').length} / {TITLE_MAX}자 · 직접 바꾼 제목은 AI가 다시 바꾸지 않아요</Text>
+            <View style={styles.renameRow}>
+              <Pressable accessibilityRole="button" onPress={() => setRenaming(null)} style={[styles.renameBtn, styles.renameCancel]}>
+                <Text style={styles.renameCancelText}>취소</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={saveRename} style={[styles.renameBtn, styles.renameSave]}>
+                <Text style={styles.renameSaveText}>저장</Text>
               </Pressable>
             </View>
-            {chats.length === 0 ? (
-              <Text style={styles.historyEmpty}>아직 저장된 대화가 없어요. 질문하면 이 기기에 자동으로 저장돼요.</Text>
-            ) : (
-              <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: spacing.sm }}>
-                {chats.map((c) => (
-                  <View key={c.id} style={[styles.historyItem, c.id === chatId && styles.optionOn]}>
-                    <Pressable accessibilityRole="button" accessibilityLabel={`${c.title} 대화 열기`} onPress={() => openChat(c)} style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.optionName} numberOfLines={1}>{c.title}</Text>
-                      <Text style={styles.optionSub}>{when(c.updatedAt)} · 메시지 {c.messages.length}개</Text>
-                    </Pressable>
-                    <Pressable accessibilityRole="button" accessibilityLabel={`${c.title} 대화 삭제`} onPress={() => { deleteChat(c.id); if (c.id === chatId) newChat(); }} hitSlop={10}>
-                      <Text style={styles.deleteText}>삭제</Text>
-                    </Pressable>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-            <Text style={styles.sheetNote}>대화는 이 기기에만, 지금 공간별로 최대 50개 저장돼요.</Text>
           </View>
         </View>
       </Modal>
+
+      {/* ---------- 업로드된 파일 (아래에서 머리글 바로 아래까지 올라오는 창) ---------- */}
+      <UpSheet visible={panel === 'files'} top={headerBottom} title="업로드된 파일" onClose={() => setPanel(null)}>
+        {chatUploads.length === 0 ? (
+          <Text style={styles.historyEmpty}>이 대화에 올린 사진·파일이 없어요. 입력창 왼쪽 ＋로 올릴 수 있어요.</Text>
+        ) : (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: spacing.sm }}>
+            {chatUploads.map((u) => (
+              <Pressable
+                key={`${u.messageId}:${u.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`${u.name}, 올린 질문으로 이동`}
+                onPress={() => jumpTo(u.messageId)}
+                style={({ pressed }) => [styles.fileItem, pressed && styles.pressed]}
+              >
+                <View style={styles.fileBadge}>
+                  <Text style={styles.fileBadgeText}>{u.kind === 'image' ? '사진' : u.kind === 'document' ? '문서' : '파일'}</Text>
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.optionName} numberOfLines={1}>{u.name}</Text>
+                  <Text style={styles.optionSub} numberOfLines={1}>질문 · {u.question}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+        <Text style={styles.sheetNote}>파일은 저장하지 않고, 꺼낸 글자만 이 대화 동안 질문과 함께 보내요. 누르면 그 파일을 올린 질문으로 이동해요.</Text>
+      </UpSheet>
+
+      {/* ---------- 이전 대화 (오른쪽에서 밀려 나오는 창) ---------- */}
+      <SlidePanel visible={panel === 'history'} title="이전 대화" onClose={() => setPanel(null)}>
+        {chats.length === 0 ? (
+          <Text style={styles.historyEmpty}>아직 저장된 대화가 없어요. 질문하면 이 기기에 자동으로 저장돼요.</Text>
+        ) : (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: spacing.sm }}>
+            {sortChats(chats).map((c) => (
+              <View key={c.id} style={[styles.historyItem, c.id === chatId && styles.optionOn]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`${c.pinnedAt ? '고정된 ' : ''}${c.title} 대화 열기`} onPress={() => openChat(c)} style={{ flex: 1, gap: 2 }}>
+                  <View style={styles.historyTitleRow}>
+                    {!!c.pinnedAt && <View style={styles.pinTag}><Text style={styles.pinTagText}>고정</Text></View>}
+                    <Text style={[styles.optionName, { flexShrink: 1 }]} numberOfLines={1}>{c.title}</Text>
+                  </View>
+                  <Text style={styles.optionSub}>{when(c.updatedAt)}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`${c.title} 제목 수정`} onPress={() => startRename(c)} hitSlop={10}>
+                  <Text style={styles.editText}>수정</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`${c.title} 대화 삭제`} onPress={() => (c.id === chatId ? deleteCurrent() : deleteChat(c.id))} hitSlop={10}>
+                  <Text style={styles.deleteText}>삭제</Text>
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+        <Text style={styles.sheetNote}>대화는 이 기기에만, 지금 공간별로 최대 50개 저장돼요.</Text>
+      </SlidePanel>
     </KeyboardAvoidingView>
   );
 }
@@ -534,10 +730,45 @@ export default function AiChatScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
   flex: { flex: 1 },
-  headerBtn: { fontSize: font.body, fontWeight: '700', color: colors.mintDark },
+  // ----- 머리글 -----
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.cream },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: font.title, fontWeight: '800', color: colors.ink },
+  roundBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  pill: { flexDirection: 'row', alignItems: 'center', height: 44, paddingHorizontal: 4, borderRadius: 22, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  pillBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  pressed: { backgroundColor: colors.mintSoft },
+  menuBackdrop: { flex: 1 },
+  menu: { position: 'absolute', right: spacing.lg, minWidth: 220, paddingVertical: spacing.sm, borderRadius: 24, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.md + 2, borderRadius: radius.md, marginHorizontal: spacing.xs },
+  menuText: { fontSize: font.bodyLg, fontWeight: '600', color: colors.ink },
+  menuLine: { height: 1, backgroundColor: colors.line, marginVertical: spacing.xs },
+  historyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  editText: { fontSize: font.caption, fontWeight: '700', color: colors.mintDark },
+  renameInput: { minHeight: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: spacing.lg, fontSize: font.bodyLg, color: colors.ink },
+  renameRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  renameBtn: { flex: 1, minHeight: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  renameCancel: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  renameCancelText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },
+  renameSave: { backgroundColor: colors.mintDark },
+  renameSaveText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.white },
+  pinTag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.sm, backgroundColor: colors.mintDark },
+  pinTagText: { fontSize: 11, fontWeight: '800', color: colors.white },
+  fileItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  fileBadge: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' },
+  fileBadgeText: { fontSize: font.caption, fontWeight: '800', color: colors.mintDark },
+  panelSection: { fontSize: font.caption, fontWeight: '800', color: colors.muted, marginTop: spacing.md },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
 
   // ----- 도구 줄 -----
-  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  inputArea: { backgroundColor: colors.cream, borderTopWidth: 1, borderTopColor: colors.line },
+  inputTools: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: 6 },
+  usageRow: { gap: 6, paddingVertical: spacing.xs },
+  usageHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
+  usageLabel: { fontSize: font.body, fontWeight: '700', color: colors.ink },
+  usageNum: { fontSize: font.caption, color: colors.muted },
+  usageTrack: { height: 8, borderRadius: 4, backgroundColor: colors.line, overflow: 'hidden' },
+  usageFill: { height: 8, borderRadius: 4 },
   routeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   routeDot: { width: 8, height: 8, borderRadius: 4 },
   routeText: { fontSize: font.body, fontWeight: '700', color: colors.ink },
@@ -596,7 +827,7 @@ const styles = StyleSheet.create({
   pendingX: { fontSize: font.body, color: colors.muted },
 
   // ----- 입력창 -----
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, backgroundColor: colors.cream, borderTopWidth: 1, borderTopColor: colors.line },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   attachBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   attachIcon: { fontSize: 22, color: colors.mintDark, fontWeight: '700' },
   input: { flex: 1, minHeight: 44, maxHeight: 120, paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: 12, fontSize: font.bodyLg, color: colors.ink, backgroundColor: colors.white, borderRadius: 22, borderWidth: 1, borderColor: colors.line },

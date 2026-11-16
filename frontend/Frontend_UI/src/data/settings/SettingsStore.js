@@ -1,5 +1,7 @@
 import { runtime, runtimeSubscribe, useValue, readPreference, writePreference } from '../hooks';
 import { grantConsent, hasConsent, revokeConsent, updateMyProfile } from '../../lib/stella/account';
+import { getSubscription } from '../../lib/stella/billing';
+import { supabase } from '../../lib/stella/supabase';
 export const WEEKDAY_NAMES = ['월요일','화요일','수요일','목요일','금요일','토요일','일요일'];
 export const PLANS = { free: { name: 'Free', price: 0 }, pro: { name: 'Pro', price: 4900 }, team: { name: 'Team', price: 9900 } };
 export const USAGE_LABELS = { question: '질문', summary: '요약', record: '녹음' };
@@ -36,6 +38,34 @@ export async function setAiTransmission(route, enabled) {
   if (runtime() !== own) throw new Error('계정이 바뀌었습니다');
   return updateSettings('ai', { route, transmissionDisabled: !enabled, allowedProviders: enabled ? [route] : [], consent: { [route]: enabled } });
 }
+// This month's AI usage from the server: limits come from the plan catalog (FREE/PRO/TEAM), counts from
+// usage_counters (used + reserved for in-flight requests). The device counters (getUsage) are display-only.
+const USAGE_ITEMS = [
+  { key: 'query', metric: 'AI_QUERY', label: 'AI 채팅 질문' },
+  { key: 'ocr', metric: 'AI_OCR', label: '사진 글자 인식' },
+  { key: 'analyze', metric: 'AI_ANALYZE', label: '일정·할 일 추출' },
+  { key: 'organize', metric: 'AI_ORGANIZE', label: '메모 정리' },
+];
+export async function loadAiUsage() {
+  const own = runtime();
+  const sub = await getSubscription(supabase);
+  const seoul = new Date(Date.now() + 9 * 3600_000);
+  const month = `${seoul.getUTCFullYear()}-${String(seoul.getUTCMonth() + 1).padStart(2, '0')}-01`;
+  const { data, error } = await supabase.from('usage_counters').select('metric, used, reserved')
+    .eq('account_id', own.session.id).eq('period_start', month);
+  if (error) throw error;
+  const limits = sub.plans?.[sub.plan]?.ai ?? {};
+  return {
+    plan: sub.plan === 'TEAM' ? 'team' : sub.plan === 'PRO' ? 'pro' : 'free',
+    items: USAGE_ITEMS.map(({ key, metric, label }) => {
+      const row = data.find(r => r.metric === metric);
+      const used = Number(row?.used ?? 0) + Number(row?.reserved ?? 0);
+      const limit = Number(limits[key] ?? 0);
+      return { key, label, used, limit, remaining: Math.max(0, limit - used) };
+    }),
+  };
+}
+
 // Switching route always closes sending: consent is per route and must be given again.
 export const setAiRoute = route => updateSettings('ai', { route, transmissionDisabled: true, allowedProviders: [], consent: {} });
 

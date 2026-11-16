@@ -146,6 +146,18 @@ export async function ocrForChat(base64, signal) {
   return r.draft;
 }
 
+// Chat title from the conversation (gateway "organize" makes a ≤40-char title). Same consent gate as chat;
+// counts toward the monthly organize limit. Only the question and answer text are sent, not the sources.
+export async function titleForChat(question, answer, signal) {
+  const own = runtime();
+  const policy = aiPolicy();
+  requireTransmission(policy.route, [policy], policy.consent);
+  const text = `채팅 대화의 제목을 정하기 위한 내용입니다.\n\n질문: ${question}\n\n답변: ${answer}`.slice(0, 4000);
+  const r = await gateway('organize', { client_request_id: randomUUID(), text, workspace_id: policy.workspaceId }, { route: policy.route, signal });
+  if (current !== own || signal?.aborted) throw new Error('요청이 취소됐습니다');
+  return String(r.draft?.title ?? '').trim();
+}
+
 // Attachments (already turned into text on this device) go first; device records found by the planner follow.
 function mergeSources(attached, ranked, keywords) {
   const out = [];
