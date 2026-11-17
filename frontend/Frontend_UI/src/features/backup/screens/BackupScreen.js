@@ -7,7 +7,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import Icon from '../../../shared/components/Icon';
 import { Tag } from '../../../shared/components/Ui';
@@ -22,7 +21,6 @@ const fmt = (ms) => {
 };
 
 export default function BackupScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu();
   const { current } = useWorkspaces();
   const [order, setOrder] = useState('new'); // 'new' 최신순 | 'old' 오래된순
   const list = useBackups(order);
@@ -65,7 +63,7 @@ export default function BackupScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader title="백업 및 복원" onBack={navigation.goBack} />
       {!current.personal ? (
         // 조직(공유) 공간에서는 백업·복원을 쓸 수 없음 → 개인 공간으로 안내

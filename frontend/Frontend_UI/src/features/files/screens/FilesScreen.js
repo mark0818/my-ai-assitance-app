@@ -5,7 +5,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 import { STORAGE_INFO } from '../../../data/memos/MemoStore';
 import {
@@ -24,7 +23,6 @@ const sizeText = (n) => (!Number.isFinite(n) ? '' : n >= 1048576 ? `${(n / 10485
 const dateText = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}`; };
 
 export default function FilesScreen({ navigation, route }) {
-  const menuSwipe = useSwipeToOpenMenu();
 
   useFiles(); // 파일이 추가/삭제되면 화면 다시 그리기
   useCloudFiles(); // 공유 공간 파일이 동기화되면 다시 그리기
@@ -86,7 +84,7 @@ export default function FilesScreen({ navigation, route }) {
   };
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader title="파일 보관함" onBack={navigation.goBack} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.list}>
         {/* 로컬 / 클라우드 탭 (칩 안의 숫자 = 그 위치의 파일 개수) */}

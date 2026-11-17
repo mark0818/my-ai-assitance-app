@@ -11,12 +11,13 @@ import Icon from '../../../shared/components/Icon';
 import { Card } from '../../../shared/components/Ui';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { WEEKDAYS_LONG, toKey } from '../utils/DateUtils';
-import { classify, deleteTask, toggleDone } from '../../../data/tasks/TaskStore';
+import { classify, deleteTask, occursOn, shortDate, taskIn, toggleDone } from '../../../data/tasks/TaskStore';
 
-export default function DayAgenda({ selected, tasks, holidayName, lunarText, onAdd, onEdit }) {
+// spaces: 여러 공간을 합쳐 볼 때 { 공간 id: { name, color } } (색 막대·공간 이름에 씀). 한 공간뿐이면 null
+export default function DayAgenda({ selected, tasks, spaces, holidayName, lunarText, onAdd, onEdit }) {
   const key = toKey(selected);
   const todayKey = toKey(new Date());
-  const items = tasks.filter((t) => t.date === key); // 이미 시간순으로 정렬되어 들어옴
+  const items = tasks.filter((t) => occursOn(t, key)); // 이미 시간순으로 정렬되어 들어옴 (여러 날 일정은 걸친 날마다)
 
   const [actionId, setActionId] = useState(null);   // 꾹 눌러서 [편집][삭제] 가 열린 항목
   const [confirmId, setConfirmId] = useState(null); // 삭제 확인 창에 올린 항목
@@ -70,10 +71,14 @@ export default function DayAgenda({ selected, tasks, holidayName, lunarText, onA
           const c = classify(t, todayKey);
           // 설명 줄: 일정은 📍장소, 할 일은 '할 일 · 프로젝트(또는 완료/초과)'
           const subIcon = isEvent ? (t.place ? 'pin' : 'calendar') : 'checkCircle';
+          const span = t.endDate ? `${shortDate(t.date)}~${shortDate(t.endDate)}` : null; // 여러 날 일정
+          const space = spaces ? spaces[t.workspaceId] : null;
           const subText = isEvent
-            ? [t.place || '일정', t.project].filter(Boolean).join(' · ')
-            : ['할 일', done ? '완료' : t.project, c === 'overdue' ? '초과' : null].filter(Boolean).join(' · ');
-          const barColor = done ? colors.line : isEvent ? colors.mint : colors.mintDark;
+            ? [space?.name, span, t.place || (span || space ? null : '일정'), t.project].filter(Boolean).join(' · ')
+            : [space?.name ?? '할 일', done ? '완료' : t.project, c === 'overdue' ? '초과' : null].filter(Boolean).join(' · ');
+          // 색 막대: 여러 공간이면 공간 색, 아니면 일정 = 민트 · 할 일 = 진녹색
+          const barColor = done ? colors.line : space ? space.color : isEvent ? colors.mint : colors.mintDark;
+          const toggle = () => (t.workspaceId ? taskIn(t, 'toggleDone', t.id) : toggleDone(t.id)); // 합쳐 볼 때는 그 항목의 공간에서
           return (
             <Card key={t.id} style={[styles.item, open && styles.itemOpen]}>
               <View style={styles.itemMain}>
@@ -82,7 +87,7 @@ export default function DayAgenda({ selected, tasks, holidayName, lunarText, onA
                   style={styles.itemBody}
                   accessibilityRole="button"
                   accessibilityLabel={`${t.title} ${isEvent ? '일정' : '할 일'}`}
-                  onPress={() => (open ? setActionId(null) : onEdit(t.id))}
+                  onPress={() => (open ? setActionId(null) : onEdit(t))}
                   onLongPress={() => setActionId(open ? null : t.id)}
                   delayLongPress={350}
                 >
@@ -106,7 +111,7 @@ export default function DayAgenda({ selected, tasks, holidayName, lunarText, onA
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: done }}
                     accessibilityLabel={`${t.title} 완료 표시`}
-                    onPress={() => toggleDone(t.id)}
+                    onPress={toggle}
                     hitSlop={10}
                     style={styles.check}
                   >
@@ -121,7 +126,7 @@ export default function DayAgenda({ selected, tasks, holidayName, lunarText, onA
                     accessibilityRole="button"
                     onPress={() => {
                       setActionId(null);
-                      onEdit(t.id);
+                      onEdit(t);
                     }}
                     style={[styles.actionBtn, styles.editBtn]}
                   >
@@ -129,7 +134,7 @@ export default function DayAgenda({ selected, tasks, holidayName, lunarText, onA
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setConfirmId(t.id)}
+                    onPress={() => setConfirmId(t)}
                     style={[styles.actionBtn, styles.delBtn]}
                   >
                     <Text style={styles.delText}>삭제</Text>
@@ -149,7 +154,8 @@ export default function DayAgenda({ selected, tasks, holidayName, lunarText, onA
         danger
         onCancel={() => setConfirmId(null)}
         onConfirm={() => {
-          deleteTask(confirmId);
+          if (confirmId.workspaceId) taskIn(confirmId, 'deleteTask', confirmId.id);
+          else deleteTask(confirmId.id);
           setConfirmId(null);
           setActionId(null);
         }}

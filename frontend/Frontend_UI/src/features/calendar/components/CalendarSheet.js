@@ -6,6 +6,7 @@ import {
   BackHandler,
   PanResponder,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -19,7 +20,9 @@ import DayAgenda from './DayAgenda';
 import CalendarSearch from './CalendarSearch';
 import { WEEKDAYS, formatLunar, isSameDay, toKey, fromKey } from '../utils/DateUtils';
 import { getHolidays } from '../utils/Holidays';
-import { classify, searchTasks, useTasks } from '../../../data/tasks/TaskStore';
+import { classify, searchTasks, shiftKey, useAllTasks } from '../../../data/tasks/TaskStore';
+import { useSpaceInfo, useWorkspaces } from '../../../data/workspaces/WorkspaceStore';
+import { SpaceDot } from '../../../shared/components/SpaceTag';
 
 // 닫혀 있을 때 화면 맨 아래에 보이는 높이 (손잡이 + '이번 주' 띠). HomeScreen 이 이 값을 가져다 구슬 위치를 맞춤
 export const GRAB_HEIGHT = 118;
@@ -133,6 +136,11 @@ export default function CalendarSheet({ calendar, startFull = false, onReachTop,
       onPanResponderRelease: (_, g) => {
         dragging.current = false;
         const L = latest.current;
+        // 하단 탭의 캘린더(닫을 곳 없음): 끌어도 항상 끝까지 올라온 상태로 돌아감
+        if (L.startFull && !L.onClose) {
+          L.snapTo('full');
+          return;
+        }
 
         // (a) 거의 안 움직였다 = 그냥 "탭" → 닫혀 있으면 열고(홈: 중간 / 캘린더 화면: 끝까지), 열려 있으면 닫기
         if (Math.abs(g.dy) < 6 && Math.abs(g.vy) < 0.2) {
@@ -158,21 +166,31 @@ export default function CalendarSheet({ calendar, startFull = false, onReachTop,
   // ---------- 4) 안드로이드 뒤로가기 버튼 ----------
   // 시트가 열려 있을 때만: 뒤로가기를 누르면 시트를 닫음 (캘린더 화면 모드에서는 닫으면서 이전 화면으로 이동)
   useEffect(() => {
-    if (level === 'closed') return undefined;
+    if (level === 'closed' || (startFull && !onClose)) return undefined; // 탭 캘린더: 뒤로가기는 내비게이터가 처리
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       snapTo('closed');
       return true; // true = "내가 처리했으니 기본 동작은 하지 마"
     });
     return () => sub.remove();
-  }, [level, snapTo]);
+  }, [level, snapTo, startFull, onClose]);
 
   // ---------- 5) 달력 상태 ----------
   // 어느 달을 보고 있나 / 어느 날짜를 선택했나는 부모(AppNavigator)가 들고 있습니다.
   // 그래서 홈 시트와 캘린더 화면이 같은 상태를 공유합니다.
   const { today, cursor, selected, setSelected, shiftMonth, goToday, goToDate } = calendar;
 
-  // 일정 데이터, 공휴일, 달력 점 표시, 검색
-  const tasks = useTasks();
+  // 일정 데이터(모든 공간을 합쳐서, 공간 칩으로 켜고 끔), 공휴일, 달력 점 표시, 검색
+  const allTasks = useAllTasks();
+  const spaces = useSpaceInfo();
+  const { list: spaceList } = useWorkspaces();
+  const [hiddenSpaces, setHiddenSpaces] = useState(() => new Set());
+  const tasks = useMemo(() => (hiddenSpaces.size ? allTasks.filter((t) => !hiddenSpaces.has(t.workspaceId)) : allTasks), [allTasks, hiddenSpaces]);
+  const toggleSpace = (id) => setHiddenSpaces((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n.size >= spaceList.length ? new Set() : n; // 전부 끄면 다시 모두 보기
+  });
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const todayKey = toKey(today);
@@ -183,13 +201,18 @@ export default function CalendarSheet({ calendar, startFull = false, onReachTop,
     const m = {};
     tasks.forEach((t) => {
       const c = classify(t, todayKey);
-      const e = m[t.date] || (m[t.date] = { n: 0, overdue: false, allDone: true, dots: [] });
-      e.n += 1;
-      if (c === 'overdue') e.overdue = true;
-      if (c !== 'done') e.allDone = false;
-      if (e.dots.length < 3) {
-        e.dots.push(c === 'done' ? colors.line : c === 'overdue' ? colors.coral : t.kind === 'event' ? colors.mint : colors.mintDark);
-      }
+      // 여러 날 일정은 시작~끝 모든 날에 점 (너무 긴 범위는 62일까지만)
+      const days = [t.date];
+      for (let k = t.date; t.endDate && k < t.endDate && days.length < 62; ) days.push((k = shiftKey(k, 1)));
+      days.forEach((day) => {
+        const e = m[day] || (m[day] = { n: 0, overdue: false, allDone: true, dots: [] });
+        e.n += 1;
+        if (c === 'overdue') e.overdue = true;
+        if (c !== 'done') e.allDone = false;
+        if (e.dots.length < 3) {
+          e.dots.push(c === 'done' ? colors.line : c === 'overdue' ? colors.coral : t.kind === 'event' ? colors.mint : colors.mintDark);
+        }
+      });
     });
     return m;
   }, [tasks, todayKey]);
@@ -332,14 +355,34 @@ export default function CalendarSheet({ calendar, startFull = false, onReachTop,
                   onClose={closeSearch}
                 />
               ) : (
-                <DayAgenda
-                  selected={selected}
-                  tasks={tasks}
-                  holidayName={holidays[selectedKey]}
-                  lunarText={formatLunar(selected)}
-                  onAdd={(k) => onAddTask && onAddTask(k)}
-                  onEdit={(id) => onEditTask && onEditTask(id)}
-                />
+                <>
+                  {/* 공간 칩: 눌러서 그 공간 일정을 켜고 끔 (구글 캘린더의 캘린더 목록처럼) */}
+                  {spaceList.length > 1 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.spaceChipsBar} contentContainerStyle={styles.spaceChips}>
+                      <Pressable accessibilityRole="button" accessibilityState={{ selected: hiddenSpaces.size === 0 }} onPress={() => setHiddenSpaces(new Set())} style={[styles.spaceChip, hiddenSpaces.size === 0 && styles.spaceChipAll]}>
+                        <Text style={[styles.spaceChipText, hiddenSpaces.size === 0 && { color: colors.white }]}>모두</Text>
+                      </Pressable>
+                      {spaceList.map((w) => {
+                        const on = !hiddenSpaces.has(w.id);
+                        return (
+                          <Pressable key={w.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={`${w.name} 일정 보기`} onPress={() => toggleSpace(w.id)} style={[styles.spaceChip, !on && styles.spaceChipOff]}>
+                            <SpaceDot color={on ? spaces[w.id]?.color : colors.line} />
+                            <Text style={[styles.spaceChipText, !on && { color: colors.muted, textDecorationLine: 'line-through' }]} numberOfLines={1}>{spaces[w.id]?.name}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                  <DayAgenda
+                    selected={selected}
+                    tasks={tasks}
+                    spaces={spaceList.length > 1 ? spaces : null}
+                    holidayName={holidays[selectedKey]}
+                    lunarText={formatLunar(selected)}
+                    onAdd={(k) => onAddTask && onAddTask(k)}
+                    onEdit={(t) => onEditTask && onEditTask(t)}
+                  />
+                </>
               )}
             </View>
           </MonthCalendar>
@@ -456,6 +499,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   panelBarWrap: { height: 20, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
+  spaceChipsBar: { flexGrow: 0, flexShrink: 0, marginBottom: spacing.md },
+  spaceChips: { gap: spacing.sm, alignItems: 'center' },
+  spaceChip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, maxWidth: 160, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  spaceChipAll: { backgroundColor: colors.mintDark, borderColor: colors.mintDark },
+  spaceChipOff: { backgroundColor: colors.cream },
+  spaceChipText: { flexShrink: 1, fontSize: font.caption, fontWeight: '800', color: colors.ink },
 
   // 홈의 '이번 주' 띠 (흰 바탕, 시트와 같은 둥근 위쪽)
   peek: {

@@ -16,7 +16,6 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import {
   TYPE_INFO,
   addRecentSearch,
@@ -60,7 +59,6 @@ function HighlightText({ text, terms, style, numberOfLines }) {
 }
 
 export default function SearchScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu(); // "오른쪽으로 밀면 메뉴" 제스처
 
   // ---------- 상태 ----------
   const [query, setQuery] = useState('');                    // 입력창에 적힌 검색어
@@ -106,7 +104,7 @@ export default function SearchScreen({ navigation }) {
   return (
     <View style={styles.root}>
       {/* 헤더 (여기에 밀기 제스처 연결) */}
-      <View {...menuSwipe}>
+      <View>
         <ScreenHeader title="검색" onBack={navigation.goBack} />
       </View>
 
@@ -159,7 +157,7 @@ export default function SearchScreen({ navigation }) {
       )}
 
       {/* ---------- 본문: 상태에 따라 3가지 중 하나 ---------- */}
-      <View style={styles.flex} {...menuSwipe}>
+      <View style={styles.flex}>
         {!hasQuery ? (
           // (1) 검색어 없음 → 최근 검색어 + 추천 키워드
           <View style={styles.idle}>

@@ -9,7 +9,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import Icon from '../../../shared/components/Icon';
 import { CircleButton, DashedButton, StatBox, Tag } from '../../../shared/components/Ui';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { ROUTES } from '../../../navigation/routes';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
@@ -19,7 +18,6 @@ import { deleteProject, useProjects } from '../../../data/projects/ProjectStore'
 const toneOf = (status) => (status === '진행 중' ? 'mint' : status === '완료' ? 'muted' : 'outline');
 
 export default function ProjectsScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu();
   const insets = useSafeAreaInsets();
   const projects = useProjects();
   const [selecting, setSelecting] = useState(false);
@@ -36,7 +34,7 @@ export default function ProjectsScreen({ navigation }) {
   const doing = projects.length - done;
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader
         title={selecting ? `${ids.length}개 선택` : '프로젝트'}
         onBack={selecting ? exitSelect : navigation.goBack}

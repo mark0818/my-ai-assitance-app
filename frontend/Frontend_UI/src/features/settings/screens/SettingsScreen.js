@@ -7,7 +7,6 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { ROUTES } from '../../../navigation/routes';
 import { PLANS, useSettings } from '../../../data/settings/SettingsStore';
@@ -16,14 +15,13 @@ import { Group, Row, SectionTitle, useNotice } from '../../../shared/components/
 import Icon from '../../../shared/components/Icon';
 
 export default function SettingsScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu();
   const s = useSettings();
   const [confirmOut, setConfirmOut] = useState(false);
   const notice = useNotice();
   const name = s.profile.name.trim();
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader title="설정" onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <Pressable accessibilityRole="button" accessibilityLabel="계정 정보 보기" onPress={() => navigation.navigate(ROUTES.Account)} style={({ pressed }) => [styles.account, pressed && { backgroundColor: colors.mintSoft }]}>
