@@ -11,13 +11,16 @@ import RecordSheet from '../../record/components/RecordSheet';
 import { useRecorder } from '../../../services/device/Recorder';
 import { addRecording } from '../../../data/files/FileStore';
 import { addUsage } from '../../../data/settings/SettingsStore';
-import CalendarSheet from '../../calendar/components/CalendarSheet';
+import CalendarSheet, { GRAB_HEIGHT } from '../../calendar/components/CalendarSheet';
 import WorkspacePicker from '../../workspace/components/WorkspacePicker';
 import { useWorkspaces } from '../../../data/workspaces/WorkspaceStore';
 import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu'; // 밀어서 메뉴 열기
 import { WEEKDAYS_LONG } from '../../calendar/utils/DateUtils';
 import { QUICK_ACTIONS, ROUTES } from '../../../navigation/routes';
-import { colors, font, spacing, FILL } from '../../../shared/theme/theme';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Icon from '../../../shared/components/Icon';
+import { Card, IconTile, StatBox } from '../../../shared/components/Ui';
+import { colors, font, radius, shadow, spacing, FILL } from '../../../shared/theme/theme';
 import { classify, useTasks } from '../../../data/tasks/TaskStore';
 import { memoTitle, useMemos } from '../../../data/memos/MemoStore';
 import { toKey } from '../../calendar/utils/DateUtils';
@@ -31,12 +34,15 @@ import { pendingOf, useProposals } from '../../../data/proposals/ProposalStore';
 // ------------------------------------------------------------
 // 구슬 / 빠른 실행 메뉴의 크기와 위치 설정값
 // ------------------------------------------------------------
-const ORB = 100;               // 구슬 지름
-const CALENDAR_GRAB = 45;      // 화면 맨 아래 캘린더 손잡이 높이 (CalendarSheet.js 의 GRAB_HEIGHT 와 같아야 함)
-const CAPTION_AREA = 44;       // 구슬 아래 안내 글자 영역 높이
+const ORB = 104;               // 구슬 지름
+const HALO_INNER = 148;        // 구슬 둘레의 은은한 원 (안쪽)
+const HALO_OUTER = 188;        // 구슬 둘레의 은은한 원 (바깥쪽)
+const CALENDAR_GRAB = GRAB_HEIGHT; // 화면 맨 아래 접힌 캘린더('이번 주') 높이 — CalendarSheet.js 에서 가져옴
+const CAPTION_AREA = 70;       // 구슬 아래 안내 글자 영역 높이 (둘레 원이 글자와 겹치지 않을 만큼)
 const LONG_PRESS_MS = 350;     // 이 시간(0.35초) 이상 누르고 있으면 "길게 누르기"
 const MOVE_SLOP = 12;          // 길게 누르기 전에 이만큼(px) 이상 움직이면 "그냥 드래그"로 보고 취소
-const OPTION_SIZE = 84;        // 항목(안건 비교 등) 하나의 크기
+const OPTION_SIZE = 56;        // 항목(안건 비교 등)의 동그란 버튼 지름
+const OPTION_BOX = 84;         // 항목 하나(버튼 + 아래 글자)가 차지하는 너비
 const HIT_RADIUS = 62;         // 손가락이 항목 중심에서 이 거리 안에 들어오면 "그 항목 위"로 판단
 const SLIDE_LIMIT = 200;       // 구슬 중심에서 이 거리(px)보다 멀리 벗어나면 슬라이드 자동 종료 (3개 항목이 이 안에 들어옴)
 const SLIDING_SCALE = 0.72;    // 슬라이드 중에는 구슬이 이 비율로 작아져서 밑의 항목이 가려지지 않음
@@ -337,16 +343,19 @@ export default function HomeScreen({ navigation, calendar }) {
   const nextTimed = todayPending.filter((t) => t.start && (t.end || t.start) >= nowHM)[0];
   const untimed = todayPending.filter((t) => !t.start)[0];
   const overdueList = pending.filter((t) => classify(t, nowKey) === 'overdue');
-  let highlight = { text: '잠깐 기록하고, 필요할 때 다시 찾아보세요.', go: null };
+  //   icon: 왼쪽 타일 아이콘, title: 굵은 첫 줄, sub: 흐린 둘째 줄 (없으면 '')
+  let highlight = { icon: 'sparkles', title: '잠깐 기록하고, 필요할 때 다시 찾아보세요.', sub: '', go: null };
   if (nextTimed) {
-    highlight = { text: `다음 일정 · ${nextTimed.start} ${nextTimed.title}`, go: [ROUTES.TaskEdit, { taskId: nextTimed.id }] };
+    // 장소·끝나는 시각은 일정에 있을 때만 표시 (예: "공학관 301 · 15:30까지")
+    const sub = [nextTimed.place, nextTimed.end ? `${nextTimed.end}까지` : ''].filter(Boolean).join(' · ');
+    highlight = { icon: 'clock', title: `${nextTimed.start} ${nextTimed.title}`, sub: sub || '다음 일정', go: [ROUTES.TaskEdit, { taskId: nextTimed.id }] };
   } else if (untimed) {
-    highlight = { text: `오늘 할 일 · ${untimed.title}`, go: [ROUTES.TaskEdit, { taskId: untimed.id }] };
+    highlight = { icon: 'checkCircle', title: untimed.title, sub: untimed.place ? `오늘 할 일 · ${untimed.place}` : '오늘 할 일', go: [ROUTES.TaskEdit, { taskId: untimed.id }] };
   } else if (overdueList.length > 0) {
-    highlight = { text: `기한이 지난 할 일이 ${overdueList.length}개 있어요`, go: [ROUTES.Tasks] };
+    highlight = { icon: 'alert', title: `기한이 지난 할 일이 ${overdueList.length}개 있어요`, sub: '할 일 목록', go: [ROUTES.Tasks] };
   } else if (memos.length > 0) {
     const recent = memos.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0];
-    highlight = { text: `최근 메모 · ${memoTitle(recent)}`, go: [ROUTES.MemoEdit, { memoId: recent.id }] };
+    highlight = { icon: 'file', title: memoTitle(recent), sub: '최근 메모', go: [ROUTES.MemoEdit, { memoId: recent.id }] };
   }
   const dateText = `${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEKDAYS_LONG[now.getDay()]}`;
 
@@ -375,59 +384,72 @@ export default function HomeScreen({ navigation, calendar }) {
       <View style={styles.content} {...menuSwipe}>
         <ScreenHeader title="오늘의 플래너" right={<Bell onPress={() => navigation.navigate(ROUTES.Notices)} />} />
 
-        {/* ---------- 요약 문구 블록 (왼쪽 정렬) ---------- */}
-        <View style={styles.summary}>
-          <View style={styles.dateRow}>
-            <Text style={styles.date}>{dateText}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`현재 공간 ${workspace.name}, 눌러서 공간 전환`}
-              onPress={() => setWsOpen(true)}
-              hitSlop={8}
-              style={styles.wsChip}
-            >
-              <Text style={styles.wsChipText} numberOfLines={1}>{workspace.name} ▾</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.heading} accessibilityRole="header">오늘의 주요 내용</Text>
-          <Pressable
-            accessibilityRole={highlight.go ? 'button' : 'text'}
-            disabled={!highlight.go}
-            onPress={() => highlight.go && navigation.navigate(...highlight.go)}
-            hitSlop={8}
-          >
-            <Text style={styles.desc} numberOfLines={2}>{highlight.text}</Text>
-          </Pressable>
-          {/* ↗ 는 디자인 시안의 화살표 표시입니다(지금은 누르는 기능 없음) */}
+        {/* ---------- 날짜 + 공간 알약 ---------- */}
+        <View style={styles.top}>
+          <Text style={styles.date} accessibilityRole="header">{dateText}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="오늘의 브리핑 보기"
-            onPress={() => navigation.navigate(ROUTES.Briefing)}
+            accessibilityLabel={`현재 공간 ${workspace.name}, 눌러서 공간 전환`}
+            onPress={() => setWsOpen(true)}
             hitSlop={8}
+            style={({ pressed }) => [styles.wsPill, pressed && { backgroundColor: colors.mintSoft }]}
           >
-            <Text style={styles.counts}>
-              일정 {todayCount}개 · 남은 할 일 {remainingCount}개 ↗
-            </Text>
+            <View style={styles.wsDot} />
+            <Text style={styles.wsPillText} numberOfLines={1}>{workspace.name}</Text>
+            <Icon name="chevronDown" size={16} color={colors.muted} />
           </Pressable>
-          {proposalCount > 0 && (
-            <Pressable accessibilityRole="button" onPress={() => navigation.navigate(ROUTES.Proposals)} hitSlop={8} style={styles.aiChip}>
-              <Text style={styles.aiChipText}>✦ 확인할 AI 제안 {proposalCount}건</Text>
-            </Pressable>
-          )}
         </View>
 
-        {/* ---------- 본문: 남은 공간의 가운데에 작은 ✦ (누르면 AI 채팅) ---------- */}
-        <View style={styles.body}>
+        {/* ---------- 오늘의 주요 내용 카드 ---------- */}
+        <Card style={styles.summaryCard}>
+          <View style={styles.cardHead}>
+            <Text style={styles.heading} accessibilityRole="header">오늘의 주요 내용</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="오늘의 브리핑 보기"
+              onPress={() => navigation.navigate(ROUTES.Briefing)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.briefLink, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.briefLinkText}>브리핑 보기</Text>
+              <Icon name="chevronRight" size={14} color={colors.muted} />
+            </Pressable>
+          </View>
+
+          {/* 가장 중요한 한 가지: 아이콘 타일 + 굵은 제목 + 흐린 설명 */}
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="AI 채팅으로 이동"
-            onPress={() => navigation.navigate(ROUTES.Ai)}
-            hitSlop={16}
-            style={({ pressed }) => [styles.sparkle, pressed && { opacity: 0.6 }]}
+            accessibilityRole={highlight.go ? 'button' : 'text'}
+            accessibilityLabel={highlight.sub ? `${highlight.title}, ${highlight.sub}` : highlight.title}
+            disabled={!highlight.go}
+            onPress={() => highlight.go && navigation.navigate(...highlight.go)}
+            style={({ pressed }) => [styles.highlight, pressed && { opacity: 0.7 }]}
           >
-            <Text style={styles.sparkleIcon}>✦</Text>
+            <IconTile icon={highlight.icon} size={44} iconSize={22} />
+            <View style={styles.highlightText}>
+              <Text style={styles.highlightTitle} numberOfLines={2}>{highlight.title}</Text>
+              {!!highlight.sub && <Text style={styles.highlightSub} numberOfLines={1}>{highlight.sub}</Text>}
+            </View>
           </Pressable>
-        </View>
+
+          {/* 오늘 일정 수 / 남은 할 일 수 */}
+          <View style={styles.stats}>
+            <StatBox icon="calendar" label="오늘 일정" value={todayCount} onPress={() => navigation.navigate(ROUTES.Briefing)} />
+            <StatBox icon="checkCircle" label="남은 할 일" value={remainingCount} onPress={() => navigation.navigate(ROUTES.Tasks)} />
+          </View>
+
+          {proposalCount > 0 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`확인할 AI 제안 ${proposalCount}건`}
+              onPress={() => navigation.navigate(ROUTES.Proposals)}
+              style={({ pressed }) => [styles.aiBar, pressed && { opacity: 0.8 }]}
+            >
+              <Icon name="sparkles" size={18} color={colors.mintDark} />
+              <Text style={styles.aiBarText}>확인할 AI 제안 {proposalCount}건</Text>
+              <Icon name="chevronRight" size={18} color={colors.mintDark} />
+            </Pressable>
+          )}
+        </Card>
       </View>
 
       <RecordSheet
@@ -457,11 +479,8 @@ export default function HomeScreen({ navigation, calendar }) {
             accessibilityLabel="빠른 메뉴 닫기"
           />
 
-          {/* 항목 사이를 나누는 두 개의 얇은 선 (시안의 / \ 모양) */}
-          <View pointerEvents="none" style={[styles.divider, { left: cx - 60, top: cy - 86 - 45, transform: [{ rotate: '-35deg' }] }]} />
-          <View pointerEvents="none" style={[styles.divider, { left: cx + 60, top: cy - 86 - 45, transform: [{ rotate: '35deg' }] }]} />
-
-          {/* 항목 3개: routes.js 의 QUICK_ACTIONS 순서대로 왼쪽, 위, 오른쪽에 배치 */}
+          {/* 항목 3개: routes.js 의 QUICK_ACTIONS 순서대로 왼쪽, 위, 오른쪽에 배치.
+              동그란 버튼의 중심이 OPTION_OFFSETS 위치에 오고, 이름은 버튼 아래에 붙음 */}
           {QUICK_ACTIONS.map((a, i) => (
             <Pressable
               key={a.route}
@@ -476,13 +495,15 @@ export default function HomeScreen({ navigation, calendar }) {
               style={[
                 styles.option,
                 {
-                  left: cx + OPTION_OFFSETS[i].x - OPTION_SIZE / 2,
+                  left: cx + OPTION_OFFSETS[i].x - OPTION_BOX / 2,
                   top: cy + OPTION_OFFSETS[i].y - OPTION_SIZE / 2,
                 },
-                hover === i && styles.optionHover, // 손가락이 올라가 있으면 강조
               ]}
             >
-              <Text style={styles.optionIcon}>{a.icon}</Text>
+              {/* 손가락이 올라가 있으면 연한 민트 + 민트 테두리로 강조 */}
+              <View style={[styles.optionCircle, hover === i && styles.optionHover]}>
+                <Icon name={a.icon} size={22} color={colors.mintDark} />
+              </View>
               <Text style={styles.optionLabel}>{a.label}</Text>
             </Pressable>
           ))}
@@ -511,8 +532,7 @@ export default function HomeScreen({ navigation, calendar }) {
         <Animated.View
           pointerEvents="none"
           style={[
-            styles.orb,
-            recording && styles.orbRecording,
+            styles.orbWrap,
             {
               transform: [
                 { translateX: drag.x },
@@ -523,22 +543,41 @@ export default function HomeScreen({ navigation, calendar }) {
             },
           ]}
         >
-          {/* 구슬의 입체감: 밝은 부분(왼쪽 위)과 어두운 부분(오른쪽)을 겹쳐 그라데이션처럼 보이게 함 */}
-          <View style={styles.orbLight} />
-          <View style={styles.orbShade} />
+          {/* 구슬 둘레의 은은한 원 2개 (메뉴가 열리면 바깥 원은 숨김) */}
+          {!menuOpen && <View style={[styles.halo, styles.haloOuter]} />}
+          <View style={[styles.halo, styles.haloInner]} />
 
-          {/* 녹음 중 아이콘: 깜빡이는 코랄색 점 + REC 글자 */}
-          {recording && (
-            <View style={styles.recBadge}>
-              <Animated.View style={[styles.recDot, { opacity: blink }]} />
-              <Text style={styles.recText}>REC</Text>
+          {/* 녹음 중에는 코랄색 테두리 */}
+          {recording && <View style={styles.recRing} />}
+
+          {/* 구슬 본체: 위(밝은 민트) → 아래(진한 녹색) 그라데이션 + 그림자 */}
+          <View style={styles.orb}>
+            <Svg width={ORB} height={ORB} style={styles.orbSvg}>
+              <Defs>
+                <LinearGradient id="homeOrbGrad" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={colors.mint} />
+                  <Stop offset="1" stopColor={colors.mintDark} />
+                </LinearGradient>
+              </Defs>
+              <Circle cx={ORB / 2} cy={ORB / 2} r={ORB / 2} fill="url(#homeOrbGrad)" />
+            </Svg>
+
+            {/* 앞쪽 내용 (웹에서 Svg 위로 보이도록 zIndex) : 마이크, 녹음 중이면 + 깜빡이는 REC */}
+            <View style={styles.orbFront}>
+              <Icon name="mic" size={recording ? 30 : 38} color={colors.white} strokeWidth={2} />
+              {recording && (
+                <View style={styles.recBadge}>
+                  <Animated.View style={[styles.recDot, { opacity: blink }]} />
+                  <Text style={styles.recText}>REC</Text>
+                </View>
+              )}
             </View>
-          )}
+          </View>
         </Animated.View>
       </View>
 
       {/* 구슬 아래 안내 글자 (상태에 따라 바뀜) */}
-      <Text pointerEvents="none" style={[styles.caption, { bottom: insets.bottom + CALENDAR_GRAB + 10 }]}>
+      <Text pointerEvents="none" style={[styles.caption, recording && !menuOpen && styles.captionRec, { bottom: insets.bottom + CALENDAR_GRAB + 10 }]}>
         {caption}
       </Text>
 
@@ -555,86 +594,72 @@ export default function HomeScreen({ navigation, calendar }) {
 }
 
 const styles = StyleSheet.create({
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  wsChip: { maxWidth: 160, minHeight: 30, paddingHorizontal: spacing.md, borderRadius: 15, borderWidth: 1, borderColor: colors.mint, backgroundColor: colors.mintSoft, justifyContent: 'center' },
-  wsChipText: { fontSize: font.caption, fontWeight: '800', color: colors.mintDark },
   wsNotice: { position: 'absolute', top: 96, alignSelf: 'center', backgroundColor: colors.ink, borderRadius: 18, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   wsNoticeText: { color: colors.white, fontSize: font.body },
   root: { flex: 1, backgroundColor: colors.cream },
   content: { flex: 1 },
 
-  // 요약 블록
-  summary: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
-  date: { fontSize: font.body, color: colors.muted },
-  heading: { fontSize: font.headline, fontWeight: '500', color: colors.ink, marginTop: spacing.xs },
-  desc: { fontSize: font.bodyLg, color: colors.muted, lineHeight: 24 },
-  counts: { fontSize: font.body, color: colors.ink, marginTop: spacing.xs },
-  aiChip: { alignSelf: 'flex-start', marginTop: spacing.sm, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.mintDark },
-  aiChipText: { color: colors.white, fontSize: font.body, fontWeight: '800' },
+  // 날짜 + 공간 알약
+  top: { paddingHorizontal: spacing.lg + spacing.xs, paddingTop: spacing.sm, gap: spacing.md },
+  date: { fontSize: font.headline, fontWeight: '800', color: colors.ink },
+  wsPill: { alignSelf: 'flex-start', maxWidth: 240, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 34, paddingLeft: spacing.md, paddingRight: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  wsDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.mint },
+  wsPillText: { flexShrink: 1, fontSize: font.body, fontWeight: '800', color: colors.ink },
 
-  // 본문: 요약 아래 남은 공간의 가운데
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  // 작은 ✦ : 누르는 영역은 64x64, 글자는 34
-  sparkle: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
-  sparkleIcon: { fontSize: 34, color: colors.ink },
+  // 오늘의 주요 내용 카드
+  summaryCard: { marginHorizontal: spacing.lg, marginTop: spacing.lg, gap: spacing.md, ...shadow.card },
+  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heading: { fontSize: 13, fontWeight: '800', color: colors.mintDark },
+  briefLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  briefLinkText: { fontSize: font.caption, color: colors.muted },
+  highlight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  highlightText: { flex: 1, gap: 2 },
+  highlightTitle: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
+  highlightSub: { fontSize: 13, color: colors.muted },
+  stats: { flexDirection: 'row', gap: spacing.sm },
+  aiBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 42, paddingHorizontal: spacing.md, borderRadius: 12, backgroundColor: colors.mintSoft },
+  aiBarText: { flex: 1, fontSize: font.body, fontWeight: '800', color: colors.mintDark },
 
   // ----- 구슬 -----
   // 터치를 받는 바깥 영역: 화면 아래쪽에 절대 위치(position absolute)로 띄움
   orbTouch: { position: 'absolute', width: ORB, height: ORB },
-  orb: {
-    width: ORB,
-    height: ORB,
-    borderRadius: ORB / 2,
-    backgroundColor: '#D3D4E1', // 은은한 은빛 라벤더
-    overflow: 'hidden',          // 안쪽 밝은/어두운 부분이 원 밖으로 안 나오게 자름
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  orbRecording: { borderColor: colors.coral }, // 녹음 중에는 코랄색 테두리
-  // 녹음 중 아이콘: 구슬 가운데에 점 + 글자를 세로로 배치
-  recBadge: { ...FILL, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  recDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.coral },
-  recText: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: colors.coral },
-  orbLight: {
-    position: 'absolute',
-    width: ORB * 0.9,
-    height: ORB * 0.9,
-    borderRadius: ORB,
-    left: -ORB * 0.25,
-    top: -ORB * 0.25,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  orbShade: {
-    position: 'absolute',
-    width: ORB * 0.8,
-    height: ORB * 1.4,
-    borderRadius: ORB,
-    right: -ORB * 0.4,
-    top: -ORB * 0.2,
-    backgroundColor: 'rgba(120,120,155,0.35)',
-  },
+  // 구슬 + 둘레 원을 함께 움직이는 틀 (둘레 원은 이 틀 밖으로 넘쳐서 그려짐)
+  orbWrap: { width: ORB, height: ORB, alignItems: 'center', justifyContent: 'center' },
+  halo: { position: 'absolute', backgroundColor: colors.mintSoft },
+  haloOuter: { width: HALO_OUTER, height: HALO_OUTER, borderRadius: HALO_OUTER / 2, left: (ORB - HALO_OUTER) / 2, top: (ORB - HALO_OUTER) / 2, opacity: 0.35 },
+  haloInner: { width: HALO_INNER, height: HALO_INNER, borderRadius: HALO_INNER / 2, left: (ORB - HALO_INNER) / 2, top: (ORB - HALO_INNER) / 2, opacity: 0.7 },
+  recRing: { position: 'absolute', width: ORB + 12, height: ORB + 12, borderRadius: (ORB + 12) / 2, left: -6, top: -6, borderWidth: 3, borderColor: colors.coral },
+  orb: { width: ORB, height: ORB, borderRadius: ORB / 2, backgroundColor: colors.mintDark, ...shadow.float },
+  orbSvg: { position: 'absolute', left: 0, top: 0 },
+  orbFront: { ...FILL, zIndex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  // 녹음 중 표시: 흰 알약 안에 깜빡이는 코랄 점 + REC
+  recBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.white },
+  recDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.coral },
+  recText: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: colors.coral },
   caption: {
     position: 'absolute',
     left: 0,
     right: 0,
     textAlign: 'center',
-    fontSize: font.caption,
-    color: colors.ink,
+    fontSize: 13,
+    color: colors.muted,
   },
+  captionRec: { color: colors.coral, fontWeight: '700' },
 
   // ----- 펼쳐진 항목 -----
-  menuBackdrop: { backgroundColor: 'rgba(255,253,248,0.88)' },
-  divider: { position: 'absolute', width: 1, height: 90, backgroundColor: colors.line },
-  option: {
-    position: 'absolute',
+  menuBackdrop: { backgroundColor: 'rgba(255,253,248,0.72)' },
+  option: { position: 'absolute', width: OPTION_BOX, alignItems: 'center', gap: 6 },
+  optionCircle: {
     width: OPTION_SIZE,
     height: OPTION_SIZE,
     borderRadius: OPTION_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.card,
   },
-  optionHover: { backgroundColor: 'rgba(150,155,190,0.4)' }, // 손가락이 올라가 있을 때
-  optionIcon: { fontSize: 22, color: colors.ink },
-  optionLabel: { fontSize: font.caption, color: colors.ink },
+  optionHover: { backgroundColor: colors.mintSoft, borderColor: colors.mint, borderWidth: 2 }, // 손가락이 올라가 있을 때
+  optionLabel: { fontSize: 13, fontWeight: '800', color: colors.ink },
 });

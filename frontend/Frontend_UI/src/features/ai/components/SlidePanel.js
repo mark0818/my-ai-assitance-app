@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useInsets as useSafeAreaInsets } from '../../../shared/hooks/useInsets';
+import { CircleButton } from '../../../shared/components/Ui';
 import { colors, font, spacing } from '../../../shared/theme/theme';
 
 export default function SlidePanel({ visible, title, onClose, children }) {
@@ -44,9 +45,7 @@ export default function SlidePanel({ visible, title, onClose, children }) {
         >
           <View style={styles.head}>
             <Text style={styles.title} accessibilityRole="header">{title}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="닫기" onPress={onClose} hitSlop={10}>
-              <Text style={styles.close}>✕</Text>
-            </Pressable>
+            <CircleButton icon="x" label="닫기" onPress={onClose} size={36} iconSize={18} />
           </View>
           <View style={styles.body}>{children}</View>
         </Animated.View>
@@ -60,7 +59,6 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(38,57,53,0.35)' },
   panel: { height: '100%', backgroundColor: colors.cream, paddingHorizontal: spacing.lg, borderLeftWidth: 1, borderLeftColor: colors.line },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  title: { fontSize: font.title, fontWeight: '800', color: colors.ink },
-  close: { fontSize: font.bodyLg, color: colors.muted, paddingHorizontal: spacing.xs },
+  title: { flexShrink: 1, fontSize: font.header + 1, fontWeight: '800', color: colors.ink },
   body: { flex: 1, gap: spacing.sm },
 });

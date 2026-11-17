@@ -67,9 +67,9 @@ export const MENU_ITEMS = [
 
 // 홈의 구슬을 "길게 눌러서 밀었을 때" 나타나는 3개 항목.
 // 배열 순서 = 화면에서 "왼쪽 → 위쪽 → 오른쪽" 순서입니다. (왼쪽부터 안건 비교, 카메라, 빠른 입력)
-//   icon : 항목 위에 보이는 작은 그림 글자
+//   icon : 항목 위에 보이는 아이콘 이름 (shared/components/Icon.js)
 export const QUICK_ACTIONS = [
-  { route: ROUTES.AgendaCompare, label: '안건 비교', icon: '⇄' },
-  { route: ROUTES.Camera, label: '카메라', icon: '📷' },
-  { route: ROUTES.QuickInput, label: '빠른 입력', icon: '✏️' },
+  { route: ROUTES.AgendaCompare, label: '안건 비교', icon: 'compare' },
+  { route: ROUTES.Camera, label: '카메라', icon: 'camera' },
+  { route: ROUTES.QuickInput, label: '빠른 입력', icon: 'pencil' },
 ];

@@ -8,7 +8,7 @@ import ScreenHeader from '../../../shared/components/ScreenHeader';
 import { colors, font, spacing } from '../../../shared/theme/theme';
 import { getSettings, updateSettings } from '../../../data/settings/SettingsStore';
 import { TimePickerModal } from '../../../shared/components/DateTimePicker';
-import { Row, SaveButton, SectionTitle, ToggleRow, same, useNotice } from '../../../shared/components/SettingsUi';
+import { Group, Row, SaveButton, SectionTitle, ToggleRow, same, useNotice } from '../../../shared/components/SettingsUi';
 import { onPushState, pushState, pushUnavailableReason, registerPush, serverNotify } from '../../../services/notify/PushRegister';
 
 const KINDS = [
@@ -44,26 +44,28 @@ export default function NotificationSettingsScreen({ navigation }) {
       <ScreenHeader title="알림 설정" onBack={navigation.goBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <SectionTitle>받을 알림</SectionTitle>
-        {KINDS.map((k) => (
-          <ToggleRow key={k.id} label={k.label} value={n[k.id]} onValueChange={(v) => set({ [k.id]: v })} />
-        ))}
+        <Group>
+          {KINDS.map((k) => (
+            <ToggleRow key={k.id} label={k.label} value={n[k.id]} onValueChange={(v) => set({ [k.id]: v })} />
+          ))}
+        </Group>
 
         <SectionTitle>방해 금지 시간</SectionTitle>
-        <ToggleRow label="방해 금지" sub="설정한 시간에는 알림을 보내지 않아요" value={n.dndOn} onValueChange={(v) => set({ dndOn: v })} />
-        {n.dndOn && (
-          <>
-            <Row label="시작" value={n.dndStart} onPress={() => setPicker('dndStart')} />
-            <Row label="끝" value={n.dndEnd} onPress={() => setPicker('dndEnd')} />
-            <Text style={styles.note}>시작이 끝보다 늦으면 다음 날 아침까지로 계산해요 (예: 22:00 ~ 06:30)</Text>
-          </>
-        )}
+        <Group>
+          <ToggleRow label="방해 금지" sub="설정한 시간에는 알림을 보내지 않아요" value={n.dndOn} onValueChange={(v) => set({ dndOn: v })} />
+          {n.dndOn && <Row label="시작" value={n.dndStart} onPress={() => setPicker('dndStart')} />}
+          {n.dndOn && <Row label="끝" value={n.dndEnd} onPress={() => setPicker('dndEnd')} />}
+        </Group>
+        {n.dndOn && <Text style={styles.note}>시작이 끝보다 늦으면 다음 날 아침까지로 계산해요 (예: 22:00 ~ 06:30)</Text>}
         <Text style={styles.note}>저장하면 이 설정대로 일정·할 일 마감·브리핑 알림이 예약돼요. 알림 시각은 일정/할 일의 [알림] 설정을 따라요.</Text>
 
         <SectionTitle>서버 알림 (공유 공간)</SectionTitle>
-        <ToggleRow label="서버 알림 받기" sub={pushStatus} value={n.server.on} disabled={!!unavailable} onValueChange={(v) => setServer({ on: v })} />
-        {n.server.on && !unavailable && SERVER_KINDS.map((k) => (
-          <ToggleRow key={k.id} label={k.label} sub={k.sub} value={n.server[k.id]} onValueChange={(v) => setServer({ [k.id]: v })} />
-        ))}
+        <Group>
+          <ToggleRow label="서버 알림 받기" sub={pushStatus} value={n.server.on} disabled={!!unavailable} onValueChange={(v) => setServer({ on: v })} />
+          {n.server.on && !unavailable && SERVER_KINDS.map((k) => (
+            <ToggleRow key={k.id} label={k.label} sub={k.sub} value={n.server[k.id]} onValueChange={(v) => setServer({ [k.id]: v })} />
+          ))}
+        </Group>
         <Text style={styles.note}>앱을 열지 않아도 공유 공간 소식을 서버가 이 휴대폰으로 보내 줘요. 서버 알림이 켜져 있으면 공유 공간의 마감 알림은 서버가 보내고, 같은 알림이 두 번 오지 않아요.</Text>
 
         <SaveButton
@@ -98,5 +100,5 @@ export default function NotificationSettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm },
-  note: { fontSize: font.caption, color: colors.muted, lineHeight: 18 },
+  note: { fontSize: font.caption, color: colors.muted, lineHeight: 18, marginHorizontal: spacing.xs },
 });

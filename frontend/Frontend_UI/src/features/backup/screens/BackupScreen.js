@@ -9,6 +9,9 @@ import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
+import Icon from '../../../shared/components/Icon';
+import { Tag } from '../../../shared/components/Ui';
+import { Radio } from '../../../shared/components/SettingsUi';
 import { MAX_BACKUPS, createBackup, deleteBackup, restoreBackup, useBackups } from '../../../data/backup/BackupStore';
 import { switchWorkspace, useWorkspaces } from '../../../data/workspaces/WorkspaceStore';
 
@@ -105,7 +108,10 @@ export default function BackupScreen({ navigation }) {
         <View style={styles.listHead}>
           <Text style={styles.listTitle}>백업 목록 {list.length}/{MAX_BACKUPS}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel={`정렬 ${order === 'new' ? '최신순' : '오래된순'}`} onPress={() => setOrder((o) => (o === 'new' ? 'old' : 'new'))} hitSlop={8}>
-            <Text style={styles.sort}>정렬 · {order === 'new' ? '최신순' : '오래된순'} ⇅</Text>
+            <View style={styles.sortRow}>
+              <Text style={styles.sort}>{order === 'new' ? '최신순' : '오래된순'}</Text>
+              <Icon name="sort" size={16} color={colors.mintDark} />
+            </View>
           </Pressable>
         </View>
 
@@ -123,20 +129,16 @@ export default function BackupScreen({ navigation }) {
                 onPress={() => setSelectedId(on ? null : b.id)}
                 style={[styles.item, on && styles.itemOn]}
               >
-                <Text style={[styles.radio, on && { color: colors.mintDark }]}>{on ? '◉' : '○'}</Text>
+                <Radio on={on} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={styles.dateRow}>
                     <Text style={styles.date}>{fmt(b.createdAt)}</Text>
-                    {b.auto && (
-                      <View style={styles.autoTag}>
-                        <Text style={styles.autoText}>자동</Text>
-                      </View>
-                    )}
+                    {b.auto && <Tag label="자동" tone="muted" />}
                   </View>
                   <Text style={styles.counts}>메모 {b.counts.memos} · 할 일 {b.counts.tasks} · 프로젝트 {b.counts.projects}</Text>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="백업 삭제" onPress={() => setDelId(b.id)} hitSlop={10}>
-                  <Text style={styles.del}>🗑</Text>
+                  <Icon name="trash" size={20} color={colors.muted} />
                 </Pressable>
               </Pressable>
             );
@@ -181,7 +183,7 @@ export default function BackupScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
-  card: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.mintSoft, gap: spacing.sm },
+  card: { padding: spacing.lg, borderRadius: radius.card, backgroundColor: colors.mintSoft, gap: spacing.sm },
   cardTitle: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
   cardSub: { fontSize: font.body, color: colors.ink, lineHeight: 20 },
   row: { flexDirection: 'row', gap: spacing.md },
@@ -193,17 +195,14 @@ const styles = StyleSheet.create({
   hint: { fontSize: font.caption, color: colors.muted },
   listHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
   listTitle: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
+  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   sort: { fontSize: font.body, fontWeight: '700', color: colors.mintDark },
   empty: { fontSize: font.body, color: colors.muted, lineHeight: 20, paddingVertical: spacing.lg },
-  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 64, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 64, padding: spacing.md, borderRadius: radius.card, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line },
   itemOn: { borderColor: colors.mint, borderWidth: 2, backgroundColor: colors.mintSoft },
-  radio: { fontSize: 22, color: colors.muted },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   date: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
   counts: { fontSize: font.caption, color: colors.muted },
-  autoTag: { paddingHorizontal: spacing.sm, minHeight: 20, borderRadius: 10, backgroundColor: colors.line, justifyContent: 'center' },
-  autoText: { fontSize: 11, fontWeight: '800', color: colors.ink },
-  del: { fontSize: 18 },
   notice: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.xl, backgroundColor: colors.ink, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   noticeText: { color: colors.white, fontSize: font.body, textAlign: 'center' },
 });

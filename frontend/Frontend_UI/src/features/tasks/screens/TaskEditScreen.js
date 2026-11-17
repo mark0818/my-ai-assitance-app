@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
+import Icon from '../../../shared/components/Icon';
+import { Chip } from '../../../shared/components/Ui';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { WEEKDAYS_LONG, fromKey, toKey } from '../../calendar/utils/DateUtils';
 import { ALARMS, PRIORITIES, STATUSES, addTask, deleteTask, findOverlap, getTask, updateTask } from '../../../data/tasks/TaskStore';
@@ -24,15 +26,7 @@ function Chips({ label, options, value, onChange }) {
       <Text style={styles.label}>{label}</Text>
       <View style={styles.chipRow}>
         {options.map((o) => (
-          <Pressable
-            key={o}
-            accessibilityRole="button"
-            accessibilityState={{ selected: value === o }}
-            onPress={() => onChange(o)}
-            style={[styles.chip, value === o && styles.chipOn]}
-          >
-            <Text style={[styles.chipText, value === o && styles.chipTextOn]}>{o}</Text>
-          </Pressable>
+          <Chip key={o} label={o} active={value === o} onPress={() => onChange(o)} />
         ))}
       </View>
     </View>
@@ -100,6 +94,7 @@ export default function TaskEditScreen({ navigation, route }) {
 
   const timeBtn = (k, placeholder) => (
     <Pressable accessibilityRole="button" accessibilityLabel={placeholder} onPress={() => setPicker(k)} style={styles.pickBtn}>
+      <Icon name="clock" size={18} color={f[k] ? colors.mintDark : colors.muted} />
       <Text style={[styles.pickText, !f[k] && { color: colors.muted }]}>{f[k] || placeholder}</Text>
     </Pressable>
   );
@@ -113,6 +108,7 @@ export default function TaskEditScreen({ navigation, route }) {
         <View style={styles.field}>
           <Text style={styles.label}>날짜 *</Text>
           <Pressable accessibilityRole="button" onPress={() => setPicker('date')} style={styles.pickBtn}>
+            <Icon name="calendar" size={18} color={colors.mintDark} />
             <Text style={styles.pickText}>{dateLabel(f.date)}</Text>
           </Pressable>
         </View>
@@ -140,9 +136,7 @@ export default function TaskEditScreen({ navigation, route }) {
           ) : (
             <View style={styles.chipRow}>
               {[{ id: null, title: '없음' }, ...projects].map((p) => (
-                <Pressable key={p.id ?? 'none'} accessibilityRole="button" accessibilityState={{ selected: projectId === p.id }} onPress={() => setProjectId(p.id)} style={[styles.chip, projectId === p.id && styles.chipOn]}>
-                  <Text style={[styles.chipText, projectId === p.id && styles.chipTextOn]} numberOfLines={1}>{p.title}</Text>
-                </Pressable>
+                <Chip key={p.id ?? 'none'} label={p.title} active={projectId === p.id} onPress={() => setProjectId(p.id)} />
               ))}
             </View>
           )}
@@ -236,19 +230,15 @@ const styles = StyleSheet.create({
   field: { gap: spacing.sm },
   label: { fontSize: font.body, fontWeight: '700', color: colors.ink },
   input: { minHeight: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: spacing.lg, fontSize: font.bodyLg, color: colors.ink },
-  pickBtn: { flex: 1, minHeight: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: spacing.lg, justifyContent: 'center' },
+  pickBtn: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: spacing.lg },
   pickText: { fontSize: font.bodyLg, color: colors.ink },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   tilde: { fontSize: font.bodyLg, color: colors.muted },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: 38, paddingHorizontal: spacing.lg, borderRadius: 19, justifyContent: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
-  chipOn: { backgroundColor: colors.mintDark, borderColor: colors.mintDark },
-  chipText: { fontSize: font.body, fontWeight: '600', color: colors.ink },
-  chipTextOn: { color: colors.white, fontWeight: '800' },
   note: { fontSize: font.caption, color: colors.muted, marginTop: -spacing.sm },
   error: { fontSize: font.body, fontWeight: '700', color: colors.coral },
-  save: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' },
+  save: { minHeight: 52, borderRadius: radius.card, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' },
   saveText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.white },
-  del: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.coral, alignItems: 'center', justifyContent: 'center' },
+  del: { minHeight: 48, borderRadius: radius.card, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.coral, alignItems: 'center', justifyContent: 'center' },
   delText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.coral },
 });
