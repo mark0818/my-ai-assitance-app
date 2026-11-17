@@ -4,6 +4,10 @@ export const TYPE_INFO = { memo: { label: '메모', icon: '📝', route: ROUTES.
 export const STORAGE_INFO = { local: { icon: '▣', label: '기기', desc: '이 기기에 저장된 파일' }, cloud: { icon: '☁', label: '클라우드', desc: '공유 공간 멤버가 함께 보는 파일' } };
 export const getMemos = () => runtime().store.getMemos();
 export const useMemos = () => useValue(getMemos);
+// 모든 공간의 메모 (항목마다 workspaceId) + 지정한 공간에 쓰기
+export const getAllMemos = () => runtime().store.getAllMemos();
+export const useAllMemos = () => useValue(getAllMemos);
+export const memoIn = (workspaceId, action, ...args) => runtime().store.inWorkspace(workspaceId, action, ...args);
 export const useTrashedMemos = () => useValue(() => runtime().store.getTrashedMemos());
 export const getMemo = id => runtime().store.getMemo(id);
 export const addMemo = input => runtime().store.addMemo(input);

@@ -17,7 +17,7 @@ import { ROUTES } from '../../navigation/routes';
 import { addNotice, noticesReady } from '../../data/notices/NoticeStore';
 import { getSettings, subscribeSettings, WEEKDAY_NAMES } from '../../data/settings/SettingsStore';
 import { getProjects, subscribeProjects } from '../../data/projects/ProjectStore';
-import { getTasks, subscribeTasks } from '../../data/tasks/TaskStore';
+import { getAllTasks, subscribeTasks } from '../../data/tasks/TaskStore';
 import { cancelAll, ensurePermission, scheduleAll } from './Notify';
 import { onPushState, registerPush, serverRemindersActive } from './PushRegister';
 import { maybeRuntime } from '../../integration/runtime';
@@ -66,9 +66,12 @@ export function planNotifications(now = Date.now()) {
 
   // 공유 공간이고 서버 알림이 오고 있으면 마감·시작 알림은 서버가 보냄 (같은 알림이 두 번 오지 않게 기기 예약은 건너뜀)
   const serverCovers = !isPersonalSpace() && serverRemindersActive();
+  // 일정·할 일은 모든 공간 것으로 예약 (지금 보고 있는 공간과 상관없이). 공유 공간 것은 서버 알림이 오면 건너뜀
+  const serverOn = serverRemindersActive();
+  const personal = new Set((maybeRuntime()?.store.getWorkspaces() ?? []).filter((w) => w.personal).map((w) => w.id));
 
-  getTasks().forEach((t) => {
-    if (serverCovers || t.status === '완료') return;
+  getAllTasks().forEach((t) => {
+    if ((serverOn && !personal.has(t.workspaceId)) || t.status === '완료') return;
     const off = OFFSET_MIN[t.alarm];
     if (off == null) return;
     if (t.start && s.notify.schedule) {
@@ -79,7 +82,7 @@ export function planNotifications(now = Date.now()) {
         body: off === 0 ? `지금 시작해요${t.place ? ` · ${t.place}` : ''}` : `${t.alarm}에 알려드려요 · ${t.start} 시작${t.place ? ` · ${t.place}` : ''}`,
         at: atOf(t.date, t.start) - off * 60000,
         route: ROUTES.TaskEdit,
-        params: { taskId: t.id },
+        params: { taskId: t.id, workspaceId: t.workspaceId },
       });
     } else if (!t.start && s.notify.due) {
       push({
@@ -89,7 +92,7 @@ export function planNotifications(now = Date.now()) {
         body: `마감일 ${t.date.slice(5).replace('-', '/')}${off >= 1440 ? ' (내일)' : ''}`,
         at: atOf(t.date, '09:00') - off * 60000,
         route: ROUTES.TaskEdit,
-        params: { taskId: t.id },
+        params: { taskId: t.id, workspaceId: t.workspaceId },
       });
     }
   });

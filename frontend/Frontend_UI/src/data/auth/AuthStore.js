@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { supabase } from '../../lib/stella/supabase';
 import { openSession, closeSession, maybeRuntime, wipeSessionData } from '../../integration/runtime';
 import { getWithdrawPreview, withdrawAccount, withdrawErrorMessage } from '../../lib/stella/withdraw';
+import { completeWebSignIn } from '../../lib/stella/auth';
 import { initializeProfile } from '../settings/SettingsStore';
 import { unregisterPush } from '../../services/notify/PushRegister';
 let state = { status: 'loading', user: null, error: null };
@@ -25,7 +26,13 @@ supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') return; // Finish the reset UI before entering the application.
   setTimeout(() => { void enqueue(session?.user ?? null); }, 0);
 });
-supabase.auth.getSession().then(({ data, error }) => error ? publish({ status: 'out', user: null, error: error.message }) : enqueue(data.session?.user ?? null));
+// 웹에서 Google·Kakao 로그인 페이지를 거쳐 돌아왔다면 먼저 로그인을 마무리 (실패하면 로그인 화면에 이유를 보여 줌)
+completeWebSignIn()
+  .catch(error => ({ failed: error?.message || '소셜 로그인을 마치지 못했어요. 다시 시도해 주세요' }))
+  .then(r => supabase.auth.getSession().then(({ data, error }) => {
+    if (r?.failed) return publish({ status: 'out', user: null, error: r.failed });
+    return error ? publish({ status: 'out', user: null, error: error.message }) : enqueue(data.session?.user ?? null);
+  }));
 export const useAuth = () => useSyncExternalStore(fn => { listeners.add(fn); return () => listeners.delete(fn); }, () => state);
 export async function startSession() {
   const { data, error } = await supabase.auth.getSession();

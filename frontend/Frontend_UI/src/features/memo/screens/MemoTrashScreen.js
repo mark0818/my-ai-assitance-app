@@ -8,7 +8,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useInsets as useSafeAreaInsets } from '../../../shared/hooks/useInsets';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { deleteMemosForever, formatMD, memoTitle, restoreMemos, useTrashedMemos } from '../../../data/memos/MemoStore';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { projectOf } from '../../../data/projects/ProjectStore';
@@ -16,7 +15,6 @@ import Icon from '../../../shared/components/Icon';
 import { CircleButton, Tag } from '../../../shared/components/Ui';
 
 export default function TrashScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu();
   const insets = useSafeAreaInsets();
   const memos = useTrashedMemos();
 
@@ -64,7 +62,7 @@ export default function TrashScreen({ navigation }) {
       : '복구한 메모는 모든 메모로 돌아갑니다';
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader
         title="휴지통"
         onBack={navigation.goBack}

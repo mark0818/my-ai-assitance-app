@@ -7,8 +7,9 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInsets as useSafeAreaInsets } from '../../../shared/hooks/useInsets';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
-import { memoTitle, restoreMemos, setFavorites, trashMemos, useMemos } from '../../../data/memos/MemoStore';
+import { memoIn, memoTitle, useAllMemos } from '../../../data/memos/MemoStore';
+import { enterSpace, useSpaceInfo, useWorkspaces } from '../../../data/workspaces/WorkspaceStore';
+import { SpaceDot } from '../../../shared/components/SpaceTag';
 import { useFiles } from '../../../data/files/FileStore';
 import Svg, { Path } from 'react-native-svg';
 import MemoCard, { FilledStar } from '../components/MemoCard';
@@ -44,9 +45,20 @@ const SORTS = [
 ];
 
 export default function MemosScreen({ navigation, route, favoritesOnly = false }) {
-  const menuSwipe = useSwipeToOpenMenu(); // "오른쪽으로 밀면 메뉴" 제스처
   const insets = useSafeAreaInsets();
-  const allMemos = useMemos(); // 메모 목록 (휴지통 제외. 바뀌면 자동으로 다시 그려짐)
+  // 모든 공간의 메모 (휴지통 제외). 공간 칩으로 한 공간만 볼 수 있음
+  const memoAll = useAllMemos();
+  const { list: spaceList, current: currentSpace } = useWorkspaces();
+  const spaces = useSpaceInfo();
+  const multi = spaceList.length > 1;
+  const personalId = spaceList.find((w) => w.personal)?.id;
+  const [space, setSpace] = useState(() => (route.params?.space && spaces[route.params.space] ? route.params.space : 'all'));
+  const pickSpace = (id) => {
+    setSpace(id);
+    setFilter('all');
+    if (id !== 'all') enterSpace(id); // 그 공간의 프로젝트로 걸러 볼 수 있게
+  };
+  const allMemos = space === 'all' ? memoAll : memoAll.filter((m) => m.workspaceId === space);
   const files = useFiles();
   const base = favoritesOnly ? allMemos.filter((m) => m.favorite) : allMemos;
 
@@ -92,7 +104,7 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
     })
     .sort(sorters[sort]);
   // 걸러보기 칩에 보여줄 프로젝트 (메모가 들어 있는 것만)
-  const projChips = projectsAll.filter((p) => base.some((m) => (projectOf('memos', m.id) || {}).id === p.id));
+  const projChips = multi && space === 'all' ? [] : projectsAll.filter((p) => base.some((m) => (projectOf('memos', m.id) || {}).id === p.id));
   const hasInk = base.some((m) => m.strokes && m.strokes.length);
   const hasPhoto = base.some((m) => m.photos && m.photos.length);
   // 같은 이름이 여러 곳에서 쓰이므로 목록 구역(오늘/어제/…) 나누기
@@ -122,7 +134,7 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
   const [pickingProject, setPickingProject] = useState(false); // 선택한 메모의 프로젝트 고르기 창
   const [selecting, setSelecting] = useState(false); // 선택 모드인가
   const [selected, setSelected] = useState([]);      // 선택한 메모 번호들
-  const [undoIds, setUndoIds] = useState([]);        // 방금 휴지통으로 보낸 메모들 (되돌리기용)
+  const [undoIds, setUndoIds] = useState([]);        // 방금 휴지통으로 보낸 메모들 { 공간 id: [메모 id] } (되돌리기용)
   const undoTimer = useRef(null);
   useEffect(() => () => clearTimeout(undoTimer.current), []);
 
@@ -158,23 +170,59 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
     setSelected([]);
   };
 
+  // 선택한 메모를 공간별로 나눠서 각 공간에서 실행 (여러 공간을 합쳐 볼 때)
+  const [blocked, setBlocked] = useState('');
+  const perSpace = (memoIds, action, ...args) => {
+    const groups = {};
+    memoIds.forEach((id) => {
+      const m = memoAll.find((x) => x.id === id);
+      if (m) (groups[m.workspaceId] ??= []).push(id);
+    });
+    let skipped = 0;
+    for (const [ws, list] of Object.entries(groups)) {
+      try { memoIn(ws, action, list, ...args); } catch (e) { skipped += list.length; }
+    }
+    if (skipped) {
+      setBlocked(`보기 전용 공간의 메모 ${skipped}개는 바꾸지 못했어요`);
+      setTimeout(() => setBlocked(''), 3000);
+    }
+    return groups;
+  };
   const doFavorite = () => {
-    setFavorites(ids, !allFavorite);
+    perSpace(ids, 'setFavorites', !allFavorite);
     exitSelect();
   };
 
   // 삭제 = 휴지통으로 이동. 4초 동안 "되돌리기" 안내
   const doTrash = () => {
     const moved = ids;
-    trashMemos(moved);
+    const groups = perSpace(moved, 'trashMemos');
     exitSelect();
-    setUndoIds(moved);
+    setUndoIds(groups);
     clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoIds([]), 4000);
   };
   const undo = () => {
-    if (undoIds.length) restoreMemos(undoIds);
+    for (const [ws, list] of Object.entries(undoIds)) {
+      try { memoIn(ws, 'restoreMemos', list); } catch (e) { /* 그새 지워진 공간 */ }
+    }
     setUndoIds([]);
+  };
+  const undoCount = Object.values(undoIds).reduce((n, list) => n + list.length, 0);
+  // 프로젝트는 공간 안에 있으므로, 선택한 메모가 한 공간 것일 때만 정할 수 있음
+  const pickProject = () => {
+    const wsIds = [...new Set(selectedMemos.map((m) => m.workspaceId))];
+    if (wsIds.length > 1) {
+      setBlocked('프로젝트는 같은 공간의 메모끼리만 정할 수 있어요');
+      setTimeout(() => setBlocked(''), 3000);
+      return;
+    }
+    enterSpace(wsIds[0]);
+    setPickingProject(true);
+  };
+  const openMemo = (m) => {
+    enterSpace(m.workspaceId);
+    navigation.navigate(ROUTES.MemoEdit, { memoId: m.id });
   };
 
   const title = favoritesOnly ? '즐겨찾기' : '모든 메모';
@@ -182,7 +230,7 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
   const none = ids.length === 0;
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader
         title={selecting ? `${ids.length}개 선택` : title}
         onBack={selecting ? exitSelect : navigation.goBack}
@@ -231,7 +279,22 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
           </View>
         )}
 
-        {/* 걸러보기 칩 */}
+        {/* 공간 칩: 모든 공간 또는 한 공간만 */}
+        {!selecting && multi && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            {[{ id: 'all', name: '모든 공간' }, ...spaceList.map((w) => ({ id: w.id, name: spaces[w.id]?.name, color: spaces[w.id]?.color }))].map((s) => {
+              const on = space === s.id;
+              return (
+                <Pressable key={s.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => pickSpace(s.id)} style={[styles.spaceChip, on && styles.spaceChipOn]}>
+                  {!!s.color && <SpaceDot color={s.color} />}
+                  <Text style={[styles.spaceChipText, on && { color: colors.mintDark }]} numberOfLines={1}>{s.name}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* 걸러보기 칩 (프로젝트 칩은 한 공간을 골랐을 때만: 프로젝트는 공간 안에 있음) */}
         {!selecting && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
             {[{ id: 'all', label: '전체' }, ...(hasInk ? [{ id: 'ink', label: '손글씨' }] : []), ...(hasPhoto ? [{ id: 'photo', label: '사진' }] : []), ...projChips.map((p) => ({ id: `proj:${p.id}`, label: p.title || '(제목 없음)' }))].map((c) => (
@@ -297,11 +360,12 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
                     selecting={selecting}
                     selected={ids.includes(m.id)}
                     highlighted={highlightId === m.id}
-                    projectTitle={projTitleOf(m)}
+                    projectTitle={m.workspaceId === currentSpace.id ? projTitleOf(m) : ''}
+                    space={multi && space === 'all' ? spaces[m.workspaceId] : null}
                     photoUri={photoOf(m)}
                     onLayout={(e) => onCardLayout(m.id, e)}
                     // 짧게 누르기: 선택 모드면 선택/해제, 아니면 열기
-                    onPress={() => (selecting ? toggle(m.id) : navigation.navigate(ROUTES.MemoEdit, { memoId: m.id }))}
+                    onPress={() => (selecting ? toggle(m.id) : openMemo(m))}
                     // 꾹 누르기: 선택 모드 시작 (이 메모가 첫 선택)
                     onLongPress={() => {
                       if (!selecting) {
@@ -318,14 +382,19 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
       </ScrollView>
 
       {/* 삭제 직후 "되돌리기" 안내 */}
-      {undoIds.length > 0 && !selecting && (
+      {undoCount > 0 && !selecting && !blocked && (
         <View style={[styles.snack, { bottom: insets.bottom + spacing.xl }]}>
           <Text style={styles.snackText}>
-            {undoIds.length > 1 ? `메모 ${undoIds.length}개를 휴지통으로 이동했어요` : '휴지통으로 이동했어요'}
+            {undoCount > 1 ? `메모 ${undoCount}개를 휴지통으로 이동했어요` : '휴지통으로 이동했어요'}
           </Text>
           <Pressable accessibilityRole="button" onPress={undo} hitSlop={8}>
             <Text style={styles.snackAction}>되돌리기</Text>
           </Pressable>
+        </View>
+      )}
+      {!!blocked && (
+        <View pointerEvents="none" style={[styles.snack, { bottom: insets.bottom + spacing.xl }]}>
+          <Text style={styles.snackText}>{blocked}</Text>
         </View>
       )}
 
@@ -334,7 +403,11 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="새 메모 쓰기"
-          onPress={() => navigation.navigate(ROUTES.MemoEdit)}
+          onPress={() => {
+            // 새 메모는 고른 공간에 (모든 공간 보기에서는 개인 공간에)
+            enterSpace(space !== 'all' ? space : personalId);
+            navigation.navigate(ROUTES.MemoEdit);
+          }}
           style={({ pressed }) => [styles.fab, { bottom: insets.bottom + spacing.xl }, pressed && { opacity: 0.85 }]}
         >
           <Icon name="plus" size={28} color={colors.white} strokeWidth={2.2} />
@@ -353,11 +426,11 @@ export default function MemosScreen({ navigation, route, favoritesOnly = false }
             disabled={none}
             onPress={() => {
               if (ids.length === 1) {
-                const id = ids[0];
+                const m = selectedMemos[0];
                 exitSelect();
-                navigation.navigate(ROUTES.MemoEdit, { memoId: id });
+                openMemo(m);
               } else {
-                setPickingProject(true);
+                pickProject();
               }
             }}
             style={[styles.barBtn, none && styles.off]}
@@ -446,6 +519,9 @@ const styles = StyleSheet.create({
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md + 2, minHeight: 48, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   searchInput: { flex: 1, fontSize: font.bodyLg, color: colors.ink, paddingVertical: 8 },
   chips: { gap: spacing.sm, paddingVertical: 2 },
+  spaceChip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, maxWidth: 160, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  spaceChipOn: { borderColor: colors.mintDark, borderWidth: 2, backgroundColor: colors.mintSoft },
+  spaceChipText: { flexShrink: 1, fontSize: font.caption, fontWeight: '800', color: colors.ink },
   chip: { maxWidth: 180 },
   tools: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },

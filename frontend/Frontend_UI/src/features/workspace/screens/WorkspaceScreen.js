@@ -7,14 +7,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { CircleButton, DashedButton, IconTile } from '../../../shared/components/Ui';
 import { ROUTES } from '../../../navigation/routes';
 import { deleteWorkspace, switchWorkspace, useWorkspaces } from '../../../data/workspaces/WorkspaceStore';
 
 export default function WorkspaceScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu();
   const { list, current } = useWorkspaces();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -39,7 +37,7 @@ export default function WorkspaceScreen({ navigation }) {
   const target = list.find((w) => w.id === delId);
 
   return (
-    <View style={styles.root} {...menuSwipe}>
+    <View style={styles.root}>
       <ScreenHeader
         title="공간 전환"
         onBack={navigation.goBack}
@@ -85,27 +83,6 @@ export default function WorkspaceScreen({ navigation }) {
           공간을 바꾸면 그 공간의 메모·할 일·프로젝트·파일이 보여요. 개인 공간의 기록은 다른 팀원에게 보이지 않아요.
           {list.length > 1 ? ' 조직 공간을 꾹 누르면 삭제하거나 나갈 수 있어요.' : ''}
         </Text>
-
-        {/* 서버가 연결되기 전 미리보기용 (나중에 지울 것) */}
-        <View style={styles.previewBox}>
-          <Text style={styles.previewTitle}>초대 화면 미리보기 (임시)</Text>
-          <View style={styles.previewRow}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => navigation.navigate(ROUTES.WorkspaceInvite, { name: '팀 프로젝트 회의', inviter: '홍길동', role: '멤버', members: 6, status: 'valid' })}
-              style={styles.previewBtn}
-            >
-              <Text style={styles.previewText}>수락 화면</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => navigation.navigate(ROUTES.WorkspaceInvite, { name: '팀 프로젝트 회의', inviter: '홍길동', role: '멤버', members: 6, status: 'expired' })}
-              style={styles.previewBtn}
-            >
-              <Text style={styles.previewText}>만료 화면</Text>
-            </Pressable>
-          </View>
-        </View>
       </ScrollView>
 
       {!!notice && (
@@ -147,11 +124,6 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: spacing.md, minHeight: 26, borderRadius: radius.pill, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontSize: font.caption, fontWeight: '800', color: colors.white },
   hint: { fontSize: font.caption, color: colors.muted, lineHeight: 18, marginTop: spacing.sm },
-  previewBox: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radius.card, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, gap: spacing.sm },
-  previewTitle: { fontSize: font.caption, color: colors.muted },
-  previewRow: { flexDirection: 'row', gap: spacing.sm },
-  previewBtn: { flex: 1, minHeight: 40, borderRadius: radius.pill, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
-  previewText: { fontSize: font.body, color: colors.ink, fontWeight: '600' },
   notice: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.xl, backgroundColor: colors.ink, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   noticeText: { color: colors.white, fontSize: font.body },
 });

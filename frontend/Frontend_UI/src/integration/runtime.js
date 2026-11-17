@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { openDatabaseAsync, openDatabaseSync } from 'expo-sqlite';
+import { deleteDatabaseAsync, openDatabaseAsync, openDatabaseSync } from 'expo-sqlite';
 import { randomUUID } from 'expo-crypto';
 import { createLocalStore, createBridge } from '../../../../backend/local/src/index.js';
 import * as engine from '../lib/stella/local-sync';
@@ -91,7 +91,77 @@ function warmUpWebSQLite() {
   return webWarmup;
 }
 
-export async function openSession(user) {
+// ---------------------------------------------------------------------
+// 계정별 기기 DB 파일 정리
+//   웹의 expo-sqlite는 브라우저 저장소(OPFS)에 파일을 최대 6개까지만 둘 수 있음 (계정 하나에 DB 2개 + 쓰는 동안 임시 파일).
+//   탈퇴한 계정의 파일이 남아 있으면 새 계정(예: 탈퇴 후 같은 카카오로 다시 가입 = 새 계정 id)이 DB를 만들지 못함.
+// ---------------------------------------------------------------------
+const accountDbNames = id => [`planner-${id}.db`, `sync-${id}.db`];
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const WEB_ACCOUNTS_KEY = 'planner.web.dbAccounts'; // 이 브라우저에 DB 파일이 있는 계정 id들
+// 파일을 새로 만들 자리가 없을 때 expo-sqlite(웹)가 내는 오류들 (만드는 시점에 따라 메시지가 다름)
+const isPoolFull = error => /unable to open database file|cannot create file|sqlite3_open_v2/i.test(String(error?.message ?? error));
+
+function webAccounts() {
+  try { return JSON.parse(globalThis.localStorage?.getItem(WEB_ACCOUNTS_KEY) || '[]'); } catch { return []; }
+}
+function rememberWebAccount(id, present) {
+  if (Platform.OS !== 'web') return;
+  try {
+    const next = new Set(webAccounts());
+    if (present) next.add(id); else next.delete(id);
+    globalThis.localStorage.setItem(WEB_ACCOUNTS_KEY, JSON.stringify([...next]));
+  } catch { /* 저장소를 못 써도 정리만 못 할 뿐 */ }
+}
+
+/** 이 계정의 기기 DB 파일을 지움 (탈퇴 뒤). 이미 없으면 넘어감 */
+async function deleteAccountFiles(id) {
+  for (const name of accountDbNames(id)) {
+    try { await deleteDatabaseAsync(name); } catch { /* 없는 파일 */ }
+  }
+  rememberWebAccount(id, false);
+}
+
+/**
+ * (웹) 저장 공간이 가득 찼을 때: 다른 계정의 DB 중 탈퇴로 이미 비워진 것(설정·메모·일정이 하나도 없음)만 지움.
+ * 기록이 남아 있는 계정(로그아웃만 한 계정)의 파일은 건드리지 않음. 지운 계정 수를 돌려줌
+ */
+async function freeWebSpace(exceptId) {
+  const candidates = new Set(webAccounts());
+  try {
+    for (const key of Object.keys(globalThis.localStorage ?? {})) for (const m of key.matchAll(UUID_RE)) candidates.add(m[0].toLowerCase());
+  } catch { /* 저장소를 못 읽으면 목록만으로 */ }
+  candidates.delete(exceptId.toLowerCase());
+  let freed = 0;
+  for (const id of candidates) {
+    let db;
+    try { db = await openDatabaseAsync(`planner-${id}.db`); } catch { continue; } // 파일이 없거나 열 수 없음
+    let wiped = false;
+    try {
+      const has = async table => (await db.getFirstAsync('select count(*) as n from sqlite_master where type=\'table\' and name=?', [table])).n > 0;
+      const count = async table => ((await has(table)) ? (await db.getFirstAsync(`select count(*) as n from ${table}`)).n : 0);
+      wiped = (await count('integration_preferences')) === 0 && (await count('memos')) === 0 && (await count('tasks')) === 0;
+    } catch {
+      wiped = false;
+    } finally {
+      await db.closeAsync().catch(() => {});
+    }
+    if (wiped) { await deleteAccountFiles(id); freed += 1; }
+  }
+  return freed;
+}
+
+export async function openSession(user, { retried = false } = {}) {
+  try {
+    return await openSessionOnce(user);
+  } catch (error) {
+    if (Platform.OS !== 'web' || !isPoolFull(error)) throw error;
+    if (!retried && (await freeWebSpace(user.id)) > 0) return openSession(user, { retried: true });
+    throw new Error('이 브라우저의 기기 저장 공간이 가득 찼어요. 이 브라우저에서 다른 계정으로 쓰던 기록이 남아 있어서 새 계정의 저장소를 만들 수 없어요. 다른 계정으로 로그인해 정리하거나, 브라우저의 사이트 데이터를 지운 뒤 다시 시도해 주세요.');
+  }
+}
+
+async function openSessionOnce(user) {
   if (current?.session.id === user.id) return current;
   await closeSession(false);
   if (!/^[0-9a-f-]{36}$/i.test(user.id)) throw new Error('유효한 계정 ID가 필요합니다');
@@ -100,7 +170,9 @@ export async function openSession(user) {
   let syncNative = null;
   try {
     syncNative = openDatabaseSync(`sync-${user.id}.db`);
-    return await initSession(user, db, syncNative);
+    const opened = await initSession(user, db, syncNative);
+    rememberWebAccount(user.id, true);
+    return opened;
   } catch (error) {
     // A failed start must release both handles; otherwise the next attempt (e.g. the queued
     // onAuthStateChange) cannot reopen the same account files (web OPFS handles are exclusive).
@@ -303,6 +375,8 @@ export async function wipeSessionData() {
   preferenceCache.clear();
   await engine.clearLocalSync(own.syncDb);
   await closeSession(false);
+  // 탈퇴한 계정의 빈 DB 파일까지 지움 (웹은 저장 공간이 작아서, 남겨 두면 새 계정이 DB를 못 만듦)
+  await deleteAccountFiles(own.session.id);
 }
 
 export async function closeSession(requireSynced = true) {

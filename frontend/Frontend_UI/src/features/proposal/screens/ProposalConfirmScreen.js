@@ -13,7 +13,7 @@ import { getSettings } from '../../../data/settings/SettingsStore';
 import { fromKey } from '../../calendar/utils/DateUtils';
 import { DatePickerModal, TimePickerModal } from '../../../shared/components/DateTimePicker';
 import { useNotice } from '../../../shared/components/SettingsUi';
-import { KIND_LABEL } from './ProposalListScreen';
+import { KIND_LABEL } from '../components/ProposalCard';
 
 const dateLabel = (k) => { if (!k) return '날짜 선택'; const d = fromKey(k); return `${d.getMonth() + 1}월 ${d.getDate()}일`; };
 

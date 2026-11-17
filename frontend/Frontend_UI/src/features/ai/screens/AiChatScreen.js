@@ -27,7 +27,6 @@ import Icon from '../../../shared/components/Icon';
 import { CircleButton } from '../../../shared/components/Ui';
 import { useLeadAction } from '../../../navigation/ScreenEntry';
 import SlidePanel from '../components/SlidePanel';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { openParams } from '../../../data/memos/MemoStore';
 import { AI_ROUTE_LABEL, LOCAL_AI_AVAILABLE, PLANS, addUsage, loadAiUsage, setAiRoute, setAiTransmission, useSettings } from '../../../data/settings/SettingsStore';
 import { ROUTES } from '../../../navigation/routes';
@@ -167,7 +166,6 @@ function MessageBubble({ message, onOpenSource }) {
 }
 
 export default function AiChatScreen({ navigation }) {
-  const menuSwipe = useSwipeToOpenMenu();
   // 왼쪽 위: 사이드 메뉴로 열었으면 ☰, 다른 화면(홈의 ✦ 등)에서 왔으면 ‹
   const lead = useLeadAction(navigation.goBack);
   const insets = useSafeAreaInsets();
@@ -403,7 +401,7 @@ export default function AiChatScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={styles.flex} {...menuSwipe}>
+      <View style={styles.flex}>
         {/* 머리글: 왼쪽 뒤로 가기 · 가운데 제목 · 오른쪽 [새 채팅 | 더보기] (이전 대화는 더보기 안, AI 선택·사용량은 입력창 오른쪽 아래) */}
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]} onLayout={(e) => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
           {/* 대화 중에는 대화 제목 (자동으로 만든 제목 또는 사용자가 바꾼 제목) · 양옆 버튼과 상관없이 정가운데 */}
@@ -412,7 +410,7 @@ export default function AiChatScreen({ navigation }) {
               {(messages.length > 0 && chats.find((c) => c.id === chatId)?.title) || 'AI 채팅'}
             </Text>
           </View>
-          <CircleButton icon={lead.menu ? 'menu' : 'chevronLeft'} label={lead.menu ? '메뉴 열기' : '뒤로 가기'} onPress={lead.onPress} />
+          {lead.hidden ? <View style={{ width: 40 }} /> : <CircleButton icon="chevronLeft" label="뒤로 가기" onPress={lead.onPress} />}
           {/* 첫 화면: 이전 대화 하나 · 대화 중: [새 채팅] [더보기] */}
           <View style={styles.headerRight}>
             {messages.length === 0 ? (

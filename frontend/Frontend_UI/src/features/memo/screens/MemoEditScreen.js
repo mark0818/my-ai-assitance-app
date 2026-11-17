@@ -27,7 +27,6 @@ import { runtime, maybeRuntime, registerSessionFlush } from '../../../integratio
 import SelectionOverlay from '../components/SelectionOverlay';
 import { recognizeStrokes } from '../../../services/ai/Handwriting';
 import { strokesInRect } from '../utils/InkUtils';
-import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { addMemo, deleteMemoForever, getMemo, trashMemo, updateMemo } from '../../../data/memos/MemoStore';
 import { projectOf, setItemProject, useProjects } from '../../../data/projects/ProjectStore';
 import { summarizeText } from '../../../services/ai/AiSummary';
@@ -69,7 +68,6 @@ const summaryLines = (text) =>
     .filter(Boolean);
 
 export default function MemoEditScreen({ navigation, route }) {
-  const menuSwipe = useSwipeToOpenMenu();
   const insets = useSafeAreaInsets();
 
   const memoId = route.params?.memoId;
@@ -410,7 +408,7 @@ export default function MemoEditScreen({ navigation, route }) {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* 헤더 (여기에 밀기 제스처 연결. 입력창/필기 영역은 겹쳐서 제외) */}
-      <View {...menuSwipe}>
+      <View>
         {/* 시안: 가운데 제목 없이 왼쪽 ‹ · 오른쪽 휴지통 + 완료 */}
         <ScreenHeader
           title=""

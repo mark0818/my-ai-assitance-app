@@ -10,6 +10,7 @@ import { memoTitle } from '../../../data/memos/MemoStore';
 import { pointsToPath } from '../utils/InkUtils';
 import Icon from '../../../shared/components/Icon';
 import { IconTile, Tag } from '../../../shared/components/Ui';
+import SpaceTag from '../../../shared/components/SpaceTag';
 
 // 별 모양 (Icon.js 의 star 와 같은 24x24 경로)
 const STAR_D = 'M11.53 2.3a.53.53 0 0 1 .94 0l2.31 4.68a2.12 2.12 0 0 0 1.6 1.16l5.16.76a.53.53 0 0 1 .3.9l-3.74 3.64a2.12 2.12 0 0 0-.61 1.88l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a2.12 2.12 0 0 0-1.97 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a2.12 2.12 0 0 0-.61-1.88L2.16 9.8a.53.53 0 0 1 .29-.9l5.17-.76a2.12 2.12 0 0 0 1.6-1.16z';
@@ -75,7 +76,7 @@ function Check({ on, style }) {
   );
 }
 
-export default function MemoCard({ memo, mode, selecting, selected, highlighted, projectTitle, photoUri, onPress, onLongPress, onLayout }) {
+export default function MemoCard({ memo, mode, selecting, selected, highlighted, projectTitle, space, photoUri, onPress, onLongPress, onLayout }) {
   const hasInk = !!(memo.strokes && memo.strokes.length > 0);
   const hasThumb = !!photoUri || hasInk;
   const body = (memo.body || '').trim();
@@ -101,6 +102,7 @@ export default function MemoCard({ memo, mode, selecting, selected, highlighted,
       )}
       {showInk && hasInk && <Icon name="pencil" size={13} color={colors.muted} />}
       {!!projectTitle && <Tag label={projectTitle} style={styles.tag} />}
+      {space && <SpaceTag space={space} />}
     </View>
   );
 

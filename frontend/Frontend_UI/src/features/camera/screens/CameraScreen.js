@@ -31,7 +31,7 @@ export default function CameraScreen({ navigation }) {
     setError('');
     try {
       const pic = await camRef.current.takePictureAsync({ quality: 0.7 });
-      const fileId = addPhoto({ uri: pic.uri });
+      const fileId = (await addPhoto({ uri: pic.uri })).id; // 저장이 끝난 뒤의 파일 id (메모·프로젝트 연결에 씀)
       setCount((n) => n + 1);
       setDone('');
       setShot({ fileId, uri: pic.uri, recs: recommendTargets(new Date()) });

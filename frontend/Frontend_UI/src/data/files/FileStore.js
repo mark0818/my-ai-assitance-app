@@ -12,8 +12,45 @@ import { describe, extract, readBytes } from '../../services/ai/ChatAttachments'
 //   getFiles('local') / useFiles(): device files only (memo photos, project links and agenda use these).
 //   getFiles('cloud') / useCloudFiles(): the shared workspace's attachments, read from the sync engine's `assets`
 //   records (the server is the source of truth, other members see them after sync). The personal space has none.
-export const getFiles = storage => (storage === 'cloud' ? getCloudFiles() : list('files').filter(f => !storage || f.storage === storage));
-export const useFiles = () => useValue(() => list('files'));
+export const getFiles = storage => (storage === 'cloud' ? getCloudFiles() : localFiles().filter(f => !storage || f.storage === storage));
+export const useFiles = () => useValue(localFiles);
+
+// ---------------------------------------------------------------------
+// 웹: expo-file-system이 웹을 지원하지 않아서, 기기 파일은 브라우저 파일 저장소(OPFS의 planner-files 폴더)에 둠.
+//   목록에는 webName(저장한 파일 이름)을 적고, 화면에는 읽어 들인 파일의 임시 주소(blob:)를 uri로 넘김.
+//   (SQLite가 쓰는 6개짜리 파일 묶음과는 다른 폴더라 그 한도와 상관없음)
+// ---------------------------------------------------------------------
+const WEB = Platform.OS === 'web';
+const WEB_DIR = 'planner-files';
+const webUrls = new Map(); // webName → blob: 주소 (이 페이지가 열려 있는 동안만)
+const webLoading = new Set();
+let webVersion = 0;
+const webDir = async () => (await navigator.storage.getDirectory()).getDirectoryHandle(WEB_DIR, { create: true });
+function loadWebUrl(name) {
+  if (webUrls.has(name) || webLoading.has(name)) return;
+  webLoading.add(name);
+  (async () => {
+    const file = await (await (await webDir()).getFileHandle(name)).getFile();
+    webUrls.set(name, URL.createObjectURL(file));
+    webVersion += 1;
+    emitRuntime();
+  })().catch(error => console.warn('[files] 브라우저에 저장한 파일을 읽지 못했습니다', name, error)).finally(() => webLoading.delete(name));
+}
+let webView = { rows: null, version: -1, out: EMPTY_ROWS() };
+function EMPTY_ROWS() { return Object.freeze([]); }
+/** 기기 파일 목록. 웹이면 uri를 읽어 들인 임시 주소로 바꿔 줌 (같은 목록이면 같은 배열: useSyncExternalStore용) */
+function localFiles() {
+  const rows = list('files');
+  if (!WEB) return rows;
+  if (webView.rows === rows && webView.version === webVersion) return webView.out;
+  const out = rows.map(r => {
+    if (!r.webName) return r;
+    loadWebUrl(r.webName);
+    return { ...r, uri: webUrls.get(r.webName) ?? '' };
+  });
+  webView = { rows, version: webVersion, out };
+  return out;
+}
 
 // ---------------------------------------------------------------------
 // Cloud files
@@ -116,7 +153,7 @@ export async function deleteCloudFile(id) {
 export const RECOGNIZED_MAX = 30000;
 /** Returns the text, or throws with a message for the screen. */
 export async function recognizeFile(id) {
-  const local = list('files').find(f => f.id === id);
+  const local = localFiles().find(f => f.id === id); // 웹이면 uri가 읽어 들인 임시 주소
   const remote = local ? null : getCloudFiles().find(f => f.id === id);
   const row = local ?? remote;
   if (!row) throw new Error('파일을 찾을 수 없어요');
@@ -138,11 +175,28 @@ const mimeOfName = name => MIME_BY_EXT[(String(name ?? '').split('.').pop() || '
 export const canRecognize = f => !!describe({ name: f.name, mimeType: f.mimeType ?? mimeOfName(f.name) }).kind;
 export async function addAsset(asset, fields = {}) {
   if (!asset?.uri) throw new Error('기기 파일 경로가 필요합니다');
-  const id = `local-${randomUUID()}`; const target = new File(Paths.document, `${id}-${(asset.name ?? 'file').replace(/[^\w.가-힣-]/g, '_')}`);
-  new File(asset.uri).copy(target);
-  const row = { ...fields, id, storage: 'local', name: asset.name ?? fields.name ?? '파일', title: asset.name ?? fields.name ?? '파일',
-    uri: target.uri, size: target.size, kind: fields.kind ?? '문서', createdAt: Date.now() };
-  saveList('files', [row, ...list('files')]); return row;
+  const id = `local-${randomUUID()}`;
+  const fileName = `${id}-${(asset.name ?? 'file').replace(/[^\w.가-힣-]/g, '_')}`;
+  const base = { ...fields, id, storage: 'local', name: asset.name ?? fields.name ?? '파일', title: asset.name ?? fields.name ?? '파일',
+    kind: fields.kind ?? '문서', mimeType: asset.mimeType ?? fields.mimeType, createdAt: Date.now() };
+  let row;
+  if (WEB) {
+    // 고른 파일(File 객체) 또는 blob:/data: 주소의 내용을 브라우저 파일 저장소에 복사
+    const blob = asset.file ?? (await (await fetch(asset.uri)).blob());
+    const handle = await (await webDir()).getFileHandle(fileName, { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    webUrls.set(fileName, URL.createObjectURL(blob));
+    webVersion += 1;
+    row = { ...base, webName: fileName, uri: '', size: blob.size };
+  } else {
+    const target = new File(Paths.document, fileName);
+    new File(asset.uri).copy(target);
+    row = { ...base, uri: target.uri, size: target.size };
+  }
+  saveList('files', [row, ...list('files')]);
+  return WEB ? { ...row, uri: webUrls.get(row.webName) } : row;
 }
 export const addPhoto = value => addAsset(typeof value === 'string' ? { uri: value, name: '사진.jpg' } : value, { kind: '이미지' });
 export const addRecording = (uri, seconds) => addAsset({ uri, name: '녹음.m4a' }, { kind: '녹음', seconds });
@@ -150,9 +204,22 @@ export async function deleteFile(id) {
   const row = list('files').find(f => f.id === id); if (!row) return false;
   const store = runtime().store;
   if ([...store.getMemos(), ...store.getTrashedMemos()].some(m => m.photos.includes(id))) throw new Error('메모에 첨부된 파일입니다. 첨부를 해제한 뒤 삭제해 주세요');
-  const file = new File(row.uri); if (file.exists) file.delete();
+  if (row.webName) {
+    try { await (await webDir()).removeEntry(row.webName); } catch { /* 이미 없음 */ }
+    const url = webUrls.get(row.webName);
+    if (url) { URL.revokeObjectURL(url); webUrls.delete(row.webName); }
+  } else {
+    const file = new File(row.uri); if (file.exists) file.delete();
+  }
   saveList('files', list('files').filter(f => f.id !== id)); return true;
 }
-export const checkAsset = asset => ({ ok: Boolean(asset?.uri), reason: asset?.uri ? null : 'missing' });
+export const MAX_FILE_BYTES = 20 * 1024 * 1024; // 빠른 입력 안내와 같은 20MB
+/** 올릴 수 있는 파일인지: { ok, reason } — reason은 화면에 보여 줄 글자 (ok면 null) */
+export function checkAsset(asset) {
+  if (!asset?.uri) return { ok: false, reason: '파일을 읽을 수 없어요' };
+  const size = asset.size ?? asset.file?.size;
+  if (Number.isFinite(size) && size > MAX_FILE_BYTES) return { ok: false, reason: '20MB보다 큰 파일이에요' };
+  return { ok: true, reason: null };
+}
 export async function pickAssets() { const r = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true }); return r.canceled ? [] : r.assets; }
 export async function pickAndAddFiles() { const rows = []; for (const asset of await pickAssets()) rows.push(await addAsset(asset)); return rows; }

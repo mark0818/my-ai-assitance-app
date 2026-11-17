@@ -83,8 +83,8 @@ export default function BriefingScreen({ navigation }) {
             <Section title="마감 임박" count={soon.length} open={soonOpen} onToggle={() => setSoonOpen((v) => !v)}>
               {soon.length === 0 ? <Text style={styles.rowMeta}>임박한 항목이 없어요</Text> : soon.map(row)}
             </Section>
-            <Section title="미해결 안건" count={overdue.length} open={overOpen} onToggle={() => setOverOpen((v) => !v)}>
-              {overdue.length === 0 ? <Text style={styles.rowMeta}>미해결 안건이 없어요</Text> : overdue.map(row)}
+            <Section title="기한 지남" count={overdue.length} open={overOpen} onToggle={() => setOverOpen((v) => !v)}>
+              {overdue.length === 0 ? <Text style={styles.rowMeta}>기한이 지난 항목이 없어요</Text> : overdue.map(row)}
             </Section>
           </>
         )}

@@ -28,11 +28,11 @@ const FILTERS = [
   { id: 'project', label: '프로젝트' },
 ];
 
-export default function QuickInputScreen({ navigation }) {
+export default function QuickInputScreen({ navigation, route }) {
   const tasks = useTasks();
   const projects = useProjects();
   const notice = useNotice();
-  const [tab, setTab] = useState('memo');
+  const [tab, setTab] = useState(route?.params?.tab === 'file' ? 'file' : 'memo');
   const [body, setBody] = useState('');
   const [taskIds, setTaskIds] = useState([]);
   const [projectId, setProjectId] = useState(null);
@@ -110,8 +110,8 @@ export default function QuickInputScreen({ navigation }) {
         ...cur,
         ...assets.map((a) => {
           keySeq.current += 1;
-          const reason = checkAsset(a);
-          return { key: `s${keySeq.current}`, asset: a, status: reason ? 'failed' : 'ready', reason, canRetry: false };
+          const check = checkAsset(a); // { ok, reason }
+          return { key: `s${keySeq.current}`, asset: a, status: check.ok ? 'ready' : 'failed', reason: check.reason ?? '', canRetry: false };
         }),
       ]);
     } catch (e) {
