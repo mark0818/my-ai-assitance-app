@@ -6,11 +6,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import Svg, { Path, Rect } from 'react-native-svg';
+import Icon from '../../../shared/components/Icon';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { newTranscribeJob, transcribeRecording } from '../../../services/ai/Transcribe';
 import { analyzeText } from '../../../services/ai/AiAnalyze';
 import { addMemo } from '../../../data/memos/MemoStore';
 import { setAiTransmission } from '../../../data/settings/SettingsStore';
+
+// 재생/일시정지 아이콘 (Icon.js 에 없어 여기서 직접 그림)
+function PlayIcon({ playing, size = 18, color = colors.ink }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      {playing ? (
+        <>
+          <Rect x="6" y="4" width="4" height="16" rx="1" />
+          <Rect x="14" y="4" width="4" height="16" rx="1" />
+        </>
+      ) : (
+        <Path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" />
+      )}
+    </Svg>
+  );
+}
 
 const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
@@ -28,9 +46,10 @@ function Player({ uri }) {
           player.play();
         }
       }}
-      style={styles.ghost}
+      style={[styles.ghost, styles.row]}
     >
-      <Text style={styles.ghostText}>{status.playing ? '⏸  일시정지' : '▶  듣기'}</Text>
+      <PlayIcon playing={status.playing} />
+      <Text style={styles.ghostText}>{status.playing ? '일시정지' : '듣기'}</Text>
     </Pressable>
   );
 }
@@ -85,7 +104,10 @@ export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenMemo, o
         <View style={styles.card} accessibilityViewIsModal>
           {sheet.state === 'saved' && (
             <>
-              <Text style={styles.title}>🎙  녹음을 저장했어요</Text>
+              <View style={styles.titleRow}>
+                <View style={styles.titleIcon}><Icon name="mic" size={20} color={colors.mintDark} /></View>
+                <Text style={styles.title}>녹음을 저장했어요</Text>
+              </View>
               <Text style={styles.sub}>{fmt(sheet.seconds || 0)}{sheet.fileId ? ' · 파일 보관함에 보관돼요' : ''}</Text>
               <Player uri={sheet.uri} />
               {phase === 'done' && result ? (
@@ -126,7 +148,10 @@ export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenMemo, o
           )}
           {sheet.state === 'denied' && (
             <>
-              <Text style={styles.title}>⚠  마이크 권한이 필요해요</Text>
+              <View style={styles.titleRow}>
+                <View style={[styles.titleIcon, { backgroundColor: colors.coralSoft }]}><Icon name="alert" size={20} color={colors.coral} /></View>
+                <Text style={styles.title}>마이크 권한이 필요해요</Text>
+              </View>
               <Text style={styles.sub}>녹음을 하려면 마이크 권한을 허용해 주세요.</Text>
               <Pressable accessibilityRole="button" onPress={() => { onClose(); Linking.openSettings().catch(() => {}); }} style={styles.primary}>
                 <Text style={styles.primaryText}>설정 열기</Text>
@@ -135,7 +160,10 @@ export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenMemo, o
           )}
           {sheet.state === 'error' && (
             <>
-              <Text style={styles.title}>⚠  녹음하지 못했어요</Text>
+              <View style={styles.titleRow}>
+                <View style={[styles.titleIcon, { backgroundColor: colors.coralSoft }]}><Icon name="alert" size={20} color={colors.coral} /></View>
+                <Text style={styles.title}>녹음하지 못했어요</Text>
+              </View>
               <Text style={styles.sub}>다시 시도해 주세요. 계속되면 마이크가 다른 앱에서 쓰이고 있는지 확인해 주세요.</Text>
             </>
           )}
@@ -148,16 +176,19 @@ export default function RecordSheet({ sheet, onClose, onOpenFiles, onOpenMemo, o
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(38,57,53,0.45)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  card: { width: '100%', maxWidth: 360, backgroundColor: colors.cream, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.md },
-  title: { fontSize: font.title, fontWeight: '800', color: colors.ink },
+  card: { width: '100%', maxWidth: 360, backgroundColor: colors.card, borderRadius: radius.card, borderWidth: 1, borderColor: colors.line, padding: spacing.xl, gap: spacing.md },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' },
+  title: { flexShrink: 1, fontSize: font.title, fontWeight: '800', color: colors.ink },
+  row: { flexDirection: 'row', gap: spacing.sm },
   sub: { fontSize: font.body, color: colors.muted, lineHeight: 20 },
   note: { fontSize: font.body, color: colors.mintDark, lineHeight: 20, fontWeight: '600' },
   error: { fontSize: font.body, color: colors.coral, lineHeight: 20, fontWeight: '600' },
   hint: { fontSize: font.caption, color: colors.muted, lineHeight: 18 },
   textBox: { maxHeight: 200, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
   text: { fontSize: font.body, color: colors.ink, lineHeight: 21 },
-  primary: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm },
+  primary: { minHeight: 52, borderRadius: radius.pill, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm },
   primaryText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.white },
-  ghost: { minHeight: 48, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  ghost: { minHeight: 48, borderRadius: radius.pill, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   ghostText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },
 });

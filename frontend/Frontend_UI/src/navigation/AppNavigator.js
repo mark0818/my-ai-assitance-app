@@ -80,7 +80,7 @@ const REAL_SCREENS = {
   [ROUTES.WorkspaceCreate]: WorkspaceCreateScreen, // 새 워크스페이스 만들기
   [ROUTES.WorkspaceInvite]: WorkspaceInviteScreen, // 초대 수락 / 만료
   [ROUTES.Calendar]: CalendarScreen, // 사이드 메뉴 "캘린더" + 홈 시트를 끝까지 올렸을 때
-  [ROUTES.Ai]: AiChatScreen,         // 사이드 메뉴 "AI 채팅" + 홈의 ✦ 버튼
+  [ROUTES.Ai]: AiChatScreen,         // 사이드 메뉴 "AI 채팅"
   [ROUTES.Search]: SearchScreen,     // 사이드 메뉴 "검색"
   [ROUTES.Memos]: MemosScreen,       // 사이드 메뉴 "메모" + 검색/AI 결과에서 이동
   [ROUTES.MemoEdit]: MemoEditScreen, // 메모 작성/편집 (메모 화면의 ＋ 버튼, 메모 카드)

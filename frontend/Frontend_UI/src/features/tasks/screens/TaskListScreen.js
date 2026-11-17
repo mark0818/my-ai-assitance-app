@@ -6,11 +6,14 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
+import Icon from '../../../shared/components/Icon';
+import { Chip, CircleButton, DashedButton, Tag } from '../../../shared/components/Ui';
 import useSwipeToOpenMenu from '../../../navigation/useSwipeToOpenMenu';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { ROUTES } from '../../../navigation/routes';
 import { toKey } from '../../calendar/utils/DateUtils';
 import { classify, shortDate, tagText, toggleDone, useTasks } from '../../../data/tasks/TaskStore';
+import { projectOf, useProjects } from '../../../data/projects/ProjectStore';
 
 const FILTERS = [
   { id: 'all', label: '전체' },
@@ -21,9 +24,20 @@ const FILTERS = [
   { id: 'done', label: '완료' },
 ];
 
+// 남은/지난 날짜를 말로: '2일 지남', '내일', '3일 남음' (일주일 넘게 남으면 '예정')
+function whenText(t, todayKey) {
+  const c = classify(t, todayKey);
+  const days = Math.round((Date.parse(t.date) - Date.parse(todayKey)) / 86400000);
+  if (c === 'overdue' && days < 0) return `${-days}일 지남`;
+  if ((c === 'soon' || c === 'upcoming') && days === 1) return '내일';
+  if ((c === 'soon' || c === 'upcoming') && days > 1 && days < 7) return `${days}일 남음`;
+  return tagText(t, todayKey);
+}
+
 export default function TasksScreen({ navigation }) {
   const menuSwipe = useSwipeToOpenMenu();
   const tasks = useTasks();
+  useProjects(); // 프로젝트 이름이 바뀌면 꼬리표도 다시 그리기
   const [filter, setFilter] = useState('all');
   const todayKey = toKey(new Date());
 
@@ -43,34 +57,21 @@ export default function TasksScreen({ navigation }) {
 
   return (
     <View style={styles.root} {...menuSwipe}>
-      <ScreenHeader title="할 일 목록" onBack={navigation.goBack} />
+      <ScreenHeader
+        title="할 일 목록"
+        onBack={navigation.goBack}
+        right={<CircleButton icon="plus" label="할 일 추가" onPress={() => navigation.navigate(ROUTES.TaskEdit, { date: todayKey })} />}
+      />
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {FILTERS.map((f) => {
-            const on = filter === f.id;
-            return (
-              <Pressable
-                key={f.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => setFilter(f.id)}
-                style={[styles.chip, on && styles.chipOn]}
-              >
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{f.label} {counts[f.id]}</Text>
-              </Pressable>
-            );
-          })}
+          {FILTERS.map((f) => (
+            <Chip key={f.id} label={`${f.label} ${counts[f.id]}`} active={filter === f.id} onPress={() => setFilter(f.id)} />
+          ))}
         </ScrollView>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.navigate(ROUTES.TaskEdit, { date: todayKey })}
-          style={styles.add}
-        >
-          <Text style={styles.addText}>＋ 할 일 추가</Text>
-        </Pressable>
+        <DashedButton label="할 일 추가" onPress={() => navigation.navigate(ROUTES.TaskEdit, { date: todayKey })} />
 
         {list.length === 0 ? (
           <Text style={styles.empty}>해당하는 항목이 없어요</Text>
@@ -78,6 +79,7 @@ export default function TasksScreen({ navigation }) {
           list.map((t) => {
             const done = t.status === '완료';
             const c = classify(t, todayKey);
+            const proj = projectOf('tasks', t.id);
             return (
               <View key={t.id} style={styles.item}>
                 <Pressable
@@ -87,7 +89,7 @@ export default function TasksScreen({ navigation }) {
                   onPress={() => toggleDone(t.id)}
                   hitSlop={8}
                 >
-                  <Text style={[styles.check, done && { color: colors.mintDark }]}>{done ? '☑' : '☐'}</Text>
+                  <Icon name={done ? 'checkSquare' : 'square'} size={22} color={done ? colors.mintDark : colors.muted} />
                 </Pressable>
                 <Pressable
                   style={styles.body}
@@ -95,10 +97,11 @@ export default function TasksScreen({ navigation }) {
                   onPress={() => navigation.navigate(ROUTES.TaskEdit, { taskId: t.id })}
                 >
                   <Text style={[styles.title, done && styles.titleDone]} numberOfLines={1}>{t.title}</Text>
-                  <Text style={[styles.meta, c === 'overdue' && { color: colors.coral, fontWeight: '700' }]} numberOfLines={1}>
-                    {shortDate(t)} · {tagText(t, todayKey)}{t.start ? ` · ${t.start}` : ''}
+                  <Text style={[styles.meta, c === 'overdue' && { color: colors.coral }]} numberOfLines={1}>
+                    {shortDate(t)} · {whenText(t, todayKey)}{t.start ? ` · ${t.start}` : ''}
                   </Text>
                 </Pressable>
+                {!!proj && <Tag label={proj.title} style={styles.tag} />}
               </View>
             );
           })
@@ -111,18 +114,12 @@ export default function TasksScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
   chips: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingBottom: spacing.md },
-  chip: { paddingHorizontal: spacing.lg, minHeight: 38, borderRadius: 19, justifyContent: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
-  chipOn: { backgroundColor: colors.mintDark, borderColor: colors.mintDark },
-  chipText: { fontSize: font.body, fontWeight: '700', color: colors.ink },
-  chipTextOn: { color: colors.white },
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
-  add: { minHeight: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.mint, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' },
-  addText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.mintDark },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: 10 },
   empty: { fontSize: font.body, color: colors.muted, paddingVertical: spacing.lg, textAlign: 'center' },
-  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
-  check: { fontSize: 24, color: colors.muted },
-  body: { flex: 1, minHeight: 40, justifyContent: 'center', gap: 2 },
-  title: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },
+  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.card, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line },
+  body: { flex: 1, minHeight: 44, justifyContent: 'center', gap: 2 },
+  title: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
   titleDone: { color: colors.muted, textDecorationLine: 'line-through' },
   meta: { fontSize: font.caption, color: colors.muted },
+  tag: { alignSelf: 'center', maxWidth: 110 },
 });

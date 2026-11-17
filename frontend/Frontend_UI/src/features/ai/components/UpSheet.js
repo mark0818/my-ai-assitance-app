@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useInsets as useSafeAreaInsets } from '../../../shared/hooks/useInsets';
+import { CircleButton } from '../../../shared/components/Ui';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 
 export default function UpSheet({ visible, top = 0, title, onClose, children }) {
@@ -44,9 +45,7 @@ export default function UpSheet({ visible, top = 0, title, onClose, children }) 
           <View style={styles.grip} />
           <View style={styles.head}>
             <Text style={styles.title} accessibilityRole="header">{title}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="닫기" onPress={onClose} hitSlop={10}>
-              <Text style={styles.close}>✕</Text>
-            </Pressable>
+            <CircleButton icon="x" label="닫기" onPress={onClose} size={36} iconSize={18} />
           </View>
           <View style={styles.body}>{children}</View>
         </Animated.View>
@@ -61,7 +60,6 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.cream, borderTopLeftRadius: radius.lg + 4, borderTopRightRadius: radius.lg + 4, paddingHorizontal: spacing.lg, borderTopWidth: 1, borderColor: colors.line },
   grip: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.line, marginTop: spacing.sm, marginBottom: spacing.md },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  title: { fontSize: font.title, fontWeight: '800', color: colors.ink },
-  close: { fontSize: font.bodyLg, color: colors.muted, paddingHorizontal: spacing.xs },
+  title: { flexShrink: 1, fontSize: font.header + 1, fontWeight: '800', color: colors.ink },
   body: { flex: 1, gap: spacing.sm },
 });

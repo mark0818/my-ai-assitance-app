@@ -10,6 +10,7 @@ import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { deleteAccount, loadWithdrawPreview } from '../../../data/auth/AuthStore';
 import { useNotice } from '../../../shared/components/SettingsUi';
+import Icon from '../../../shared/components/Icon';
 import { withdrawErrorMessage, withdrawPreviewText } from '../../../lib/stella/withdraw';
 
 export default function WithdrawScreen({ navigation }) {
@@ -51,7 +52,7 @@ export default function WithdrawScreen({ navigation }) {
         </View>
 
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: agree }} onPress={() => setAgree((v) => !v)} style={styles.agree}>
-          <Text style={[styles.box, agree && { color: colors.mintDark }]}>{agree ? '☑' : '☐'}</Text>
+          <Icon name={agree ? 'checkSquare' : 'square'} size={24} color={agree ? colors.mintDark : colors.muted} />
           <Text style={styles.agreeText}>위 내용을 확인했습니다</Text>
         </Pressable>
 
@@ -92,11 +93,10 @@ export default function WithdrawScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
-  card: { padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, gap: spacing.sm },
+  card: { padding: spacing.lg, borderRadius: radius.card, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, gap: spacing.sm },
   cardTitle: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
   line: { fontSize: font.body, color: colors.ink, lineHeight: 21 },
   agree: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 48 },
-  box: { fontSize: 26, color: colors.muted },
   agreeText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },
   danger: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.coral, alignItems: 'center', justifyContent: 'center' },
   dangerText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.white },

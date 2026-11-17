@@ -14,9 +14,11 @@ import {
 } from '../../../data/files/FileStore';
 import { alertUser } from '../../../data/alert';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
+import Icon from '../../../shared/components/Icon';
+import { Chip, DashedButton } from '../../../shared/components/Ui';
 
 // 파일 종류별 아이콘
-const KIND_ICON = { 슬라이드: '📊', PDF: '📕', 문서: '📄', 이미지: '🖼️', 표: '📈', 녹음: '🎙️' };
+const KIND_ICON = { 슬라이드: 'grid', PDF: 'file', 문서: 'file', 이미지: 'image', 표: 'grid', 녹음: 'mic' };
 // 크기 · 날짜 표시
 const sizeText = (n) => (!Number.isFinite(n) ? '' : n >= 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
 const dateText = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}`; };
@@ -91,27 +93,17 @@ export default function FilesScreen({ navigation, route }) {
         <View style={styles.tabs}>
           {['local', 'cloud'].map((key) => {
             const on = tab === key;
-            return (
-              <Pressable
-                key={key}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => setTab(key)}
-                style={[styles.tab, on && styles.tabOn]}
-              >
-                <Text style={[styles.tabText, on && styles.tabTextOn]}>
-                  {STORAGE_INFO[key].icon} {STORAGE_INFO[key].label} {getFiles(key).length}
-                </Text>
-              </Pressable>
-            );
+            return <Chip key={key} label={`${STORAGE_INFO[key].label} ${getFiles(key).length}`} active={on} onPress={() => setTab(key)} />;
           })}
         </View>
         <Text style={styles.count}>{STORAGE_INFO[tab].desc}</Text>
 
         {(tab === 'local' || shared) && (
-          <Pressable accessibilityRole="button" disabled={busy} onPress={addFiles} style={[styles.add, busy && { opacity: 0.5 }]}>
-            <Text style={styles.addText}>{busy ? (tab === 'cloud' ? '올리는 중…' : '추가하는 중…') : tab === 'cloud' ? '＋ 클라우드에 올리기' : '＋ 파일 추가'}</Text>
-          </Pressable>
+          <DashedButton
+            label={busy ? (tab === 'cloud' ? '올리는 중…' : '추가하는 중…') : tab === 'cloud' ? '클라우드에 올리기' : '파일 추가'}
+            onPress={addFiles}
+            style={busy && { opacity: 0.5 }}
+          />
         )}
 
         {files.length === 0 && (
@@ -136,7 +128,7 @@ export default function FilesScreen({ navigation, route }) {
             style={[styles.card, highlightId === f.id && styles.cardFocus]}
           >
             <View style={styles.icon}>
-              <Text style={styles.iconText}>{KIND_ICON[f.kind] || '📄'}</Text>
+              <Icon name={KIND_ICON[f.kind] || 'file'} size={22} color={colors.mintDark} />
             </View>
             <View style={styles.info}>
               <Text style={styles.name}>{f.name}</Text>
@@ -163,7 +155,7 @@ export default function FilesScreen({ navigation, route }) {
               )}
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel={`${f.name} 삭제`} onPress={() => setDelId(f.id)} hitSlop={10}>
-              <Text style={styles.del}>🗑</Text>
+              <Icon name="trash" size={20} color={colors.muted} />
             </Pressable>
           </View>
         ))}
@@ -190,17 +182,6 @@ const styles = StyleSheet.create({
   count: { fontSize: font.body, color: colors.muted },
   // 탭
   tabs: { flexDirection: 'row', gap: spacing.sm },
-  tab: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  tabOn: { backgroundColor: colors.mintDark, borderColor: colors.mintDark },
-  tabText: { fontSize: font.body, color: colors.ink },
-  tabTextOn: { color: colors.white, fontWeight: '700' },
   // 파일이 없을 때 안내
   empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: spacing.xl, gap: spacing.sm },
   emptyTitle: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink, textAlign: 'center' },
@@ -208,8 +189,8 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.line,
     padding: spacing.lg,
@@ -223,14 +204,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconText: { fontSize: 22 },
   info: { flex: 1, gap: 4 },
   name: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },
   meta: { fontSize: font.caption, color: colors.muted },
-  add: { minHeight: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.mint, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' },
-  addText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.mintDark },
   note: { fontSize: font.caption, color: colors.muted, marginTop: 2 },
-  del: { fontSize: 18 },
   desc: { fontSize: font.body, color: colors.ink, lineHeight: 20, marginTop: 2 },
   actions: { gap: 4, marginTop: 2 },
   smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: spacing.md, minHeight: 32, borderRadius: 16, borderWidth: 1, borderColor: colors.mint, backgroundColor: colors.mintSoft, marginTop: 4 },

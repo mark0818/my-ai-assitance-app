@@ -9,7 +9,8 @@ import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { LOCAL_AI_AVAILABLE, PLANS, WEEKDAY_NAMES, getSettings, setAiRoute, setAiTransmission, updateSettings } from '../../../data/settings/SettingsStore';
 import { TimePickerModal } from '../../../shared/components/DateTimePicker';
 import { PURPOSES, TIMEZONES, hasPurpose, timezoneLabel, togglePurpose } from '../../../data/setup/SetupStore';
-import { Row, SaveButton, SectionTitle, ToggleRow, same, useNotice } from '../../../shared/components/SettingsUi';
+import { Group, Radio, Row, SaveButton, SectionTitle, ToggleRow, same, useNotice } from '../../../shared/components/SettingsUi';
+import Icon from '../../../shared/components/Icon';
 import { runtime, maybeRuntime } from '../../../integration/runtime';
 
 const MODES = [
@@ -42,22 +43,24 @@ export default function AiSettingsForm({ onOpenUsage, contentStyle, compact = fa
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, contentStyle]}>
         <SectionTitle>AI 처리와 전송 허용</SectionTitle>
         {/* 좁은 창(AI 채팅 오른쪽)에서도 한 줄에 들어가게 값은 짧게. 로컬 준비 중 안내는 누르면 표시 */}
-        <Row label="처리 서버" value={ai.route === 'self_hosted' ? '자체 모델' : '외부 AI'} onPress={switchRoute} />
-        <ToggleRow label="선택한 서버로 자료 전송 허용" sub={ai.route === 'self_hosted' ? 'Supabase와 자체 모델 서버가 선택한 자료를 처리합니다. 외부 AI로 전환하지 않습니다.' : 'Supabase와 외부 AI 제공자가 선택한 자료를 처리합니다.'}
-          value={!ai.transmissionDisabled} onValueChange={async enabled => {
-            if (consentBusy.current) return;
-            consentBusy.current = true;
-            const own = runtime();
-            const selected = ai.route ?? 'external';
-            set({ transmissionDisabled: true, allowedProviders: [], consent: {} });
-            try {
-              const next = await setAiTransmission(selected, enabled);
-              const { route, transmissionDisabled, allowedProviders, consent } = next.ai; // 다른 칸의 저장 전 수정은 유지
-              if (maybeRuntime() === own) set({ route, transmissionDisabled, allowedProviders, consent });
-            } catch (error) { if (maybeRuntime() === own) notice.show(error.message); }
-            finally { consentBusy.current = false; }
-          }} />
-        <ToggleRow label="AI 자동 분석" sub="입력한 내용을 AI가 자동으로 분석해요" value={ai.autoAnalyze} onValueChange={(v) => set({ autoAnalyze: v })} />
+        <Group>
+          <Row label="처리 서버" value={ai.route === 'self_hosted' ? '자체 모델' : '외부 AI'} onPress={switchRoute} />
+          <ToggleRow label="선택한 서버로 자료 전송 허용" sub={ai.route === 'self_hosted' ? 'Supabase와 자체 모델 서버가 선택한 자료를 처리합니다. 외부 AI로 전환하지 않습니다.' : 'Supabase와 외부 AI 제공자가 선택한 자료를 처리합니다.'}
+            value={!ai.transmissionDisabled} onValueChange={async enabled => {
+              if (consentBusy.current) return;
+              consentBusy.current = true;
+              const own = runtime();
+              const selected = ai.route ?? 'external';
+              set({ transmissionDisabled: true, allowedProviders: [], consent: {} });
+              try {
+                const next = await setAiTransmission(selected, enabled);
+                const { route, transmissionDisabled, allowedProviders, consent } = next.ai; // 다른 칸의 저장 전 수정은 유지
+                if (maybeRuntime() === own) set({ route, transmissionDisabled, allowedProviders, consent });
+              } catch (error) { if (maybeRuntime() === own) notice.show(error.message); }
+              finally { consentBusy.current = false; }
+            }} />
+          <ToggleRow label="AI 자동 분석" sub="입력한 내용을 AI가 자동으로 분석해요" value={ai.autoAnalyze} onValueChange={(v) => set({ autoAnalyze: v })} />
+        </Group>
 
         <SectionTitle>AI 확인 방식</SectionTitle>
         {MODES.map((m) => {
@@ -70,7 +73,7 @@ export default function AiSettingsForm({ onOpenUsage, contentStyle, compact = fa
               onPress={() => set({ confirmMode: m.id })}
               style={[styles.mode, on && styles.modeOn]}
             >
-              <Text style={[styles.radio, on && { color: colors.mintDark }]}>{on ? '◉' : '○'}</Text>
+              <Radio on={on} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={styles.modeTitle}>{m.title}</Text>
                 <Text style={styles.modeSub}>{m.sub}</Text>
@@ -85,22 +88,22 @@ export default function AiSettingsForm({ onOpenUsage, contentStyle, compact = fa
           const on = hasPurpose(setup.purpose, p.id);
           return (
             <Pressable key={p.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => setSetup((s) => ({ ...s, purpose: togglePurpose(s.purpose, p.id) }))} style={[styles.mode, on && styles.modeOn]}>
-              <Text style={[styles.radio, on && { color: colors.mintDark }]}>{on ? '☑' : '☐'}</Text>
+              <Icon name={on ? 'checkSquare' : 'square'} size={22} color={on ? colors.mintDark : colors.muted} />
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.modeTitle}>{p.icon}  {p.label}</Text>
+                <Text style={styles.modeTitle}>{p.label}</Text>
                 <Text style={styles.modeSub}>{p.sub}</Text>
               </View>
             </Pressable>
           );
         })}
-        <Row label="시간대" value={setup.timezone ? timezoneLabel(setup.timezone) : '선택 안 함'} onPress={() => setTzOpen((v) => !v)} />
+        <Row icon="globe" label="시간대" value={setup.timezone ? timezoneLabel(setup.timezone) : '선택 안 함'} onPress={() => setTzOpen((v) => !v)} />
         {tzOpen && (
           <View style={styles.sub}>
             {TIMEZONES.map((t) => {
               const on = setup.timezone === t.id;
               return (
                 <Pressable key={t.id} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => { setSetup((s) => ({ ...s, timezone: t.id })); setTzOpen(false); }} style={[styles.mode, on && styles.modeOn]}>
-                  <Text style={[styles.radio, on && { color: colors.mintDark }]}>{on ? '◉' : '○'}</Text>
+                  <Radio on={on} />
                   <Text style={styles.modeTitle}>{t.label} ({t.gmt})</Text>
                 </Pressable>
               );
@@ -109,9 +112,9 @@ export default function AiSettingsForm({ onOpenUsage, contentStyle, compact = fa
         )}
 
         <SectionTitle>브리핑</SectionTitle>
-        <ToggleRow label="주간 브리핑" sub={ai.weekly.on ? `${ai.weekly.day} ${ai.weekly.time}` : '받지 않음'} value={ai.weekly.on} onValueChange={(v) => set({ weekly: { ...ai.weekly, on: v } })} />
-        {ai.weekly.on && (
-          <View style={styles.sub}>
+        <Group>
+          <ToggleRow label="주간 브리핑" sub={ai.weekly.on ? `${ai.weekly.day} ${ai.weekly.time}` : '받지 않음'} value={ai.weekly.on} onValueChange={(v) => set({ weekly: { ...ai.weekly, on: v } })} />
+          {ai.weekly.on && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               {WEEKDAY_NAMES.map((d) => (
                 <Pressable key={d} accessibilityRole="button" accessibilityState={{ selected: ai.weekly.day === d }} onPress={() => set({ weekly: { ...ai.weekly, day: d } })} style={[styles.chip, ai.weekly.day === d && styles.chipOn]}>
@@ -119,18 +122,16 @@ export default function AiSettingsForm({ onOpenUsage, contentStyle, compact = fa
                 </Pressable>
               ))}
             </ScrollView>
-            <Row label="받는 시간" value={ai.weekly.time} onPress={() => setPicker('weekly')} />
-          </View>
-        )}
-        <ToggleRow label="일간 브리핑" sub={ai.daily.on ? ai.daily.time : '받지 않음'} value={ai.daily.on} onValueChange={(v) => set({ daily: { ...ai.daily, on: v } })} />
-        {ai.daily.on && (
-          <View style={styles.sub}>
-            <Row label="받는 시간" value={ai.daily.time} onPress={() => setPicker('daily')} />
-          </View>
-        )}
+          )}
+          {ai.weekly.on && <Row label="받는 시간" value={ai.weekly.time} onPress={() => setPicker('weekly')} />}
+        </Group>
+        <Group>
+          <ToggleRow label="일간 브리핑" sub={ai.daily.on ? ai.daily.time : '받지 않음'} value={ai.daily.on} onValueChange={(v) => set({ daily: { ...ai.daily, on: v } })} />
+          {ai.daily.on && <Row label="받는 시간" value={ai.daily.time} onPress={() => setPicker('daily')} />}
+        </Group>
 
         <SectionTitle>이용량</SectionTitle>
-        <Row label="이용량" value={PLANS[saved.plan].name} onPress={onOpenUsage} />
+        <Row icon="sparkles" label="이용량" value={PLANS[saved.plan].name} onPress={onOpenUsage} />
         </>)}
 
         <SaveButton
@@ -163,13 +164,13 @@ export default function AiSettingsForm({ onOpenUsage, contentStyle, compact = fa
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm },
-  mode: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  mode: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radius.card, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line },
   modeOn: { borderColor: colors.mint, borderWidth: 2, backgroundColor: colors.mintSoft },
-  radio: { fontSize: 22, color: colors.muted },
   modeTitle: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
   modeSub: { fontSize: font.caption, color: colors.muted, lineHeight: 17 },
   sub: { gap: spacing.sm, paddingLeft: spacing.lg },
-  chips: { gap: spacing.sm },
+  // 주간 브리핑 요일 칩 (Group 카드 안)
+  chips: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   chip: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   chipOn: { backgroundColor: colors.mintDark, borderColor: colors.mintDark },
   chipText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.ink },

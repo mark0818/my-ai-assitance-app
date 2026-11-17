@@ -6,6 +6,8 @@ import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import ScreenHeader from '../../../shared/components/ScreenHeader';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
+import Icon from '../../../shared/components/Icon';
+import { Chip } from '../../../shared/components/Ui';
 import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import { ROUTES } from '../../../navigation/routes';
 import { fromKey } from '../../calendar/utils/DateUtils';
@@ -19,9 +21,7 @@ function Chips({ label, options, value, onChange }) {
       <Text style={styles.label}>{label}</Text>
       <View style={styles.chipRow}>
         {options.map((o) => (
-          <Pressable key={o} accessibilityRole="button" accessibilityState={{ selected: value === o }} onPress={() => onChange(o)} style={[styles.chip, value === o && styles.chipOn]}>
-            <Text style={[styles.chipText, value === o && styles.chipTextOn]}>{o}</Text>
-          </Pressable>
+          <Chip key={o} label={o} active={value === o} onPress={() => onChange(o)} />
         ))}
       </View>
     </View>
@@ -79,7 +79,8 @@ export default function ProjectEditScreen({ navigation, route }) {
         <View style={styles.field}>
           <Text style={styles.label}>마감일</Text>
           <View style={styles.row}>
-            <Pressable accessibilityRole="button" onPress={() => setPickDate(true)} style={[styles.input, { flex: 1, justifyContent: 'center' }]}>
+            <Pressable accessibilityRole="button" onPress={() => setPickDate(true)} style={[styles.input, styles.pick]}>
+              <Icon name="calendar" size={18} color={f.due ? colors.mintDark : colors.muted} />
               <Text style={[styles.pickText, !f.due && { color: colors.muted }]}>
                 {f.due ? `${fromKey(f.due).getFullYear()}년 ${fromKey(f.due).getMonth() + 1}월 ${fromKey(f.due).getDate()}일` : '마감일 선택 (선택)'}
               </Text>
@@ -138,19 +139,16 @@ const styles = StyleSheet.create({
   field: { gap: spacing.sm },
   label: { fontSize: font.body, fontWeight: '700', color: colors.ink },
   input: { minHeight: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: spacing.lg, fontSize: font.bodyLg, color: colors.ink },
+  pick: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pickText: { fontSize: font.bodyLg, color: colors.ink },
   row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   clear: { minHeight: 46, paddingHorizontal: spacing.md, justifyContent: 'center' },
   clearText: { fontSize: font.body, color: colors.coral, fontWeight: '700' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: 38, paddingHorizontal: spacing.lg, borderRadius: 19, justifyContent: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
-  chipOn: { backgroundColor: colors.mintDark, borderColor: colors.mintDark },
-  chipText: { fontSize: font.body, fontWeight: '600', color: colors.ink },
-  chipTextOn: { color: colors.white, fontWeight: '800' },
   note: { fontSize: font.caption, color: colors.muted, marginTop: -spacing.sm },
   error: { fontSize: font.body, fontWeight: '700', color: colors.coral },
-  save: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' },
+  save: { minHeight: 52, borderRadius: radius.card, backgroundColor: colors.mintDark, alignItems: 'center', justifyContent: 'center' },
   saveText: { fontSize: font.bodyLg, fontWeight: '800', color: colors.white },
-  del: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.coral, alignItems: 'center', justifyContent: 'center' },
+  del: { minHeight: 48, borderRadius: radius.card, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.coral, alignItems: 'center', justifyContent: 'center' },
   delText: { fontSize: font.bodyLg, fontWeight: '700', color: colors.coral },
 });
