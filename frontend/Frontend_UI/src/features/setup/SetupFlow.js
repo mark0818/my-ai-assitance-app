@@ -17,6 +17,7 @@ import { updateSettings } from '../../data/settings/SettingsStore';
 import { PURPOSES, TIMEZONES, createStarterMemos, deviceTimezone, hasPurpose, markSetupDone, timezoneLabel, togglePurpose } from '../../data/setup/SetupStore';
 import { requestPermission } from '../../services/device/Permissions';
 import { ToggleRow } from '../../shared/components/SettingsUi';
+import { maybeRuntime } from '../../integration/runtime';
 
 const STEPS = ['intro', 'basic', 'ai', 'brief', 'perm'];
 
@@ -103,10 +104,21 @@ export default function SetupFlow({ user, onDone }) {
       ['3', '사용자 확인', '추출 내용 확인'],
       ['4', '저장', '캘린더 · 할 일에 저장'],
     ];
+    // 이 브라우저에서 쓰던 계정인데 기기 기록이 비어 있음 (절전 모드 등으로 브라우저 저장소가 지워진 경우)
+    const dataMissing = !!maybeRuntime()?.deviceDataMissing;
     return (
       <View style={styles.root}>
         {header('시작하기', false, false)}
         <ScrollView contentContainerStyle={styles.body}>
+          {dataMissing && (
+            <View style={styles.lostBox} accessibilityRole="alert">
+              <Text style={styles.lostTitle}>이 브라우저에 있던 기기 기록을 찾지 못했어요</Text>
+              <Text style={styles.lostText}>
+                공유 공간의 기록은 서버에서 다시 받아와요. 개인 공간의 메모·할 일과 설정은 이 기기에만 있어서,
+                클라우드 백업이 있다면 설정을 마친 뒤 설정 › 백업·복원에서 되살릴 수 있어요.
+              </Text>
+            </View>
+          )}
           <Text style={styles.big}>일정 및 할 일 모두{'\n'}AI가 정리해 드려요</Text>
           {flow.map(([n, t, s]) => (
             <View key={n} style={styles.flowRow}>
@@ -304,6 +316,9 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, gap: spacing.md },
   footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, gap: spacing.xs, borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.cream },
   big: { fontSize: 26, fontWeight: '800', color: colors.ink, lineHeight: 34 },
+  lostBox: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.coralSoft, gap: 4 },
+  lostTitle: { fontSize: font.body, fontWeight: '800', color: colors.ink },
+  lostText: { fontSize: font.caption, color: colors.ink, lineHeight: 18 },
   q: { fontSize: font.bodyLg, fontWeight: '800', color: colors.ink },
   note: { fontSize: font.caption, color: colors.muted, lineHeight: 18 },
   textBtn: { alignSelf: 'center', minHeight: 40, justifyContent: 'center' },
