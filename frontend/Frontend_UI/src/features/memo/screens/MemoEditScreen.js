@@ -37,6 +37,8 @@ import { colors, font, radius, spacing } from '../../../shared/theme/theme';
 import Icon from '../../../shared/components/Icon';
 import { CircleButton, PillButton } from '../../../shared/components/Ui';
 import { dateLabel } from '../components/MemoCard';
+import { EXPORT_FORMATS } from '../../../services/export/MeetingExport.mjs';
+import { exportMemo } from '../../../services/export/ShareExport';
 
 // 펜 색 / 굵기 선택지
 const PEN_COLORS = [colors.ink, colors.coral, colors.mintDark, '#4A6FA5'];
@@ -95,6 +97,8 @@ export default function MemoEditScreen({ navigation, route }) {
     original ? projectOf('memos', original.id)?.id ?? null : route.params?.projectId ?? null,
   );
   const [pickingProject, setPickingProject] = useState(false);
+  const [pickingExport, setPickingExport] = useState(false);   // 내보내기 형식 고르는 창
+  const [exporting, setExporting] = useState(null);            // 만드는 중인 형식 id
   const projectName = projects.find((p) => p.id === projectId)?.title;
 
   // ---------- 페이지(스크롤되는 메모 영역) 크기 ----------
@@ -405,6 +409,27 @@ export default function MemoEditScreen({ navigation, route }) {
     navigation.goBack();
   };
 
+  // 화면에 보이는 그대로(아직 저장 전인 수정 포함) 파일로 내보냄
+  const canExport = !!(body.trim() || strokes.length);
+  const onExport = async (formatId) => {
+    if (exporting) return;
+    setExporting(formatId);
+    try {
+      flushRef.current?.();
+      const r = await exportMemo({
+        title, body, strokes, project: projectName ?? null,
+        createdAt: original?.createdAt ?? null, updatedAt: original?.updatedAt ?? null,
+      }, formatId);
+      setPickingExport(false);
+      showNotice(r.via === 'print' ? '인쇄 창에서 "PDF로 저장"을 골라 주세요' : r.via === 'download' ? `${r.fileName} 을(를) 내려받았어요` : '공유할 곳을 골라 주세요');
+    } catch (error) {
+      setPickingExport(false);
+      showNotice(error?.message || '내보내지 못했어요. 다시 시도해 주세요');
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {/* 헤더 (여기에 밀기 제스처 연결. 입력창/필기 영역은 겹쳐서 제외) */}
@@ -415,6 +440,7 @@ export default function MemoEditScreen({ navigation, route }) {
           onBack={navigation.goBack}
           right={
             <>
+              {canExport && <CircleButton icon="download" label="파일로 내보내기" onPress={() => setPickingExport(true)} />}
               {original && <CircleButton icon="trash" label="메모 삭제" onPress={() => setConfirmDelete(true)} />}
               <PillButton label="완료" onPress={navigation.goBack} />
             </>
@@ -629,6 +655,37 @@ export default function MemoEditScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* ---------- 파일로 내보내기 (형식 고르기) ---------- */}
+      <Modal transparent visible={pickingExport} animationType="fade" onRequestClose={() => !exporting && setPickingExport(false)}>
+        <View style={styles.backdrop}>
+          <View style={styles.dialog} accessibilityViewIsModal>
+            <Text style={styles.dialogTitle}>파일로 내보내기</Text>
+            <Text style={styles.dialogSub}>
+              {Platform.OS === 'web' ? '고른 형식으로 내려받아요. PDF는 인쇄 창에서 저장해요.' : '파일을 만든 뒤 공유 창이 열려요. 메일·드라이브·메신저로 보내거나 파일에 저장할 수 있어요.'}
+            </Text>
+            <View style={{ gap: spacing.sm }}>
+              {EXPORT_FORMATS.map((f) => (
+                <Pressable
+                  key={f.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${f.label} 파일로 내보내기`}
+                  accessibilityState={{ busy: exporting === f.id, disabled: !!exporting }}
+                  disabled={!!exporting}
+                  onPress={() => onExport(f.id)}
+                  style={[styles.projOpt, styles.exportOpt, exporting && exporting !== f.id && { opacity: 0.5 }]}
+                >
+                  <Text style={styles.projOptText}>{f.label}</Text>
+                  <Text style={styles.exportExt}>{exporting === f.id ? '만드는 중…' : `.${f.extension}`}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable accessibilityRole="button" disabled={!!exporting} onPress={() => setPickingExport(false)} style={styles.projClose}>
+              <Text style={styles.projCloseText}>닫기</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* ---------- 오류 안내 창 (네트워크/서버) ---------- */}
       <ErrorModal
         kind={errView ? errView.kind : 'network'}
@@ -663,6 +720,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
 
   editor: { flex: 1, paddingHorizontal: spacing.lg },
+  exportOpt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  exportExt: { fontSize: font.caption, color: colors.muted },
   titleInput: {
     fontSize: 22,
     fontWeight: '800',

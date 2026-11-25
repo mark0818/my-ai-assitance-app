@@ -21,7 +21,8 @@ const KINDS = [
 // 서버 알림 (공유 공간 · 휴대폰). 브리핑·개인 알림은 위의 기기 알림이 보내요.
 const SERVER_KINDS = [
   { id: 'reminders', label: '공유 공간 마감·시작 알림', sub: '다른 멤버가 바꾼 일정·할 일·프로젝트도 알려 줘요' },
-  { id: 'workspace', label: '새 멤버 소식' },
+  { id: 'workspace', label: '공간 소식', sub: '새 멤버, 내 역할 변경, 공간에서 내보내짐·공간 삭제' },
+  { id: 'project', label: '프로젝트 소식', sub: '팀원으로 추가됨, 새 할 일·일정·메모, 진행 상태·마감일 변경, 할 일 담당' },
   { id: 'recording', label: '녹음 변환 끝' },
 ];
 
